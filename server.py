@@ -22,7 +22,7 @@ def generateRandomImg():
 
 def getCameraStill():
     with PiCamera() as camera:
-        camera.resolution= (500,500)
+        camera.resolution=(500,500)
         camera.capture('temp.bmp')
     data = np.asarray(cv2.imread('temp.bmp'), dtype='uint16')
     return data
@@ -34,10 +34,8 @@ def getData():
 
 def waitForClient(sock):
     connection, address = sock.accept()
-    #send SERVER_READY
     print "sending ", communication.SERVER_READY
     communication.send_msg(connection, communication.SERVER_READY)
-    #receive CLIENT_READY
     msg = communication.recv_msg(connection)
     print "received ", msg
     return connection
@@ -52,10 +50,8 @@ server_socket.listen(5)
 while(run_condition):
     try:
         connection = waitForClient(server_socket)
-        #send camera id
         print "sending ", camera_id
         communication.send_msg(connection, camera_id)
-        #receive CAMERA_ID_ACK
         print "received ", communication.recv_msg(connection)
         data = getData()
         print "sending image data"
