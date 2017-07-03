@@ -54,7 +54,7 @@ def __init__():
     signal.signal(signal.SIGINT, signal_handler)
     print 'starting server ', camera_id
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(("", 10006))
+    server_socket.bind(("", pepi_config.port))
     server_socket.listen(5)
 
     while(run_condition):

@@ -6,6 +6,8 @@ import re
 import sys
 import subprocess
 import os
+import pepi_config
+
 
 def check_server(address, port):
     # Create a TCP socket
@@ -32,13 +34,12 @@ def sweep_ping(base_address, start=1, stop=255):
                 print ip, "inactive"
             else:
                 print ip, "active"
-                if check_server(ip, 10000):
                     ipList.append(ip)
                 
+                if check_server(ip, pepi_config.port):
 
 
 if __name__ == '__main__':
-    port = 10000
     ipList = sweep_ping('192.168.1.')
     if ipList:
         with open("active_cameras.txt", "w") as f:

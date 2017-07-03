@@ -61,9 +61,8 @@ def __init__():
     dir = "images/"+get_time_stamp()
     if not os.path.exists(dir):
         os.makedirs(dir)
-    port = 10006
     ips = get_ip_list()
-    args = [(ip, port, dir) for ip in ips]
+    args = [(ip, pepi_config.port, dir) for ip in ips]
     print "Running parallel connections"
     run_parallel(run, args)
 
