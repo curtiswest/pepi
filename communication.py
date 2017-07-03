@@ -42,7 +42,7 @@ def send_img(sock, frame):
     img_size_str = numpy.asarray(frame.shape, dtype="uint16").tostring()
     print "sending img_size_str", frame.shape
     send_msg(sock, img_size_str)
-    #wait for data size ack
+    # wait for data size ack
     msg = recv_msg(sock)
     print "rceived ", msg
     img_data_str = frame.flatten().tostring()
