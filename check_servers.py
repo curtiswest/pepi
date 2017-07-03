@@ -6,6 +6,9 @@ import re
 import sys
 import subprocess
 import os
+import pepi_config
+import time
+
 
 def check_server(address, port):
     # Create a TCP socket
@@ -20,26 +23,51 @@ def check_server(address, port):
     except socket.error, e:
         print "Connection to %s on port %s failed: %s" % (address, port, e)
         return False
-    
+
+
 def sweep_ping(base_address, start=1, stop=255):
-    ipList = []
+    activeips = []
     with open(os.devnull, "wb") as limbo:
         for n in xrange(start, stop):
-            ip=base_address+str(n)
-            result=subprocess.Popen(["ping", "-c", "1", "-n", "-W", "2", ip],
-            stdout=limbo, stderr=limbo).wait()
+            ip = base_address + str(n)
+            result = subprocess.Popen(["ping", "-c", "1", "-n", "-W", "2", ip],
+                                      stdout=limbo, stderr=limbo).wait()
             if result:
                 print ip, "inactive"
             else:
                 print ip, "active"
-                if check_server(ip, 10000):
-                    ipList.append(ip)
-                
+                if check_server(ip, pepi_config.port):
+                    activeips.append(ip)
+    return activeips
+
+
+def parallel_sweep_ping(base_address, start=1, stop=255, verbose=False):
+    activeServers = []
+    with open(os.devnull, "wb") as limbo:
+        runningProcs = []
+        for n in xrange(start, stop):
+            ip = base_address + str(n)
+            procTuple = (ip, subprocess.Popen(["ping", "-c", "1", "-n", "-W", "2", ip], stdout=limbo, stderr=limbo))
+            runningProcs.append(procTuple)
+
+        while runningProcs:
+            for (procip, proc) in runningProcs:
+                retcode = proc.poll()
+                if retcode is not None:
+                    # Process has completed
+                    runningProcs.remove((procip, proc))
+                    if retcode == 0:
+                        print procip, "active"
+                        if check_server(procip, pepi_config.port):
+                            activeServers.append(procip)
+                    else:
+                        if verbose: print procip, "inactive"
+            time.sleep(1)
+    return activeServers
 
 
 if __name__ == '__main__':
-    port = 10000
-    ipList = sweep_ping('192.168.1.')
+    ipList = parallel_sweep_ping('192.168.1.')
     if ipList:
         with open("active_cameras.txt", "w") as f:
-            [f.write(ip) for ip in ipList]
+            [f.write(ip + "\n") for ip in ipList]
