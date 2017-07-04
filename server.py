@@ -27,18 +27,20 @@ def generateRandomImg():
 
 def getCameraStill():
     stream = io.BytesIO()
-    with PiCamera() as camera:
+    camera = PiCamera()
+    try:
         camera.resolution = (2592, 1944)
-    camera.start_preview()
-    time.sleep(5)
-    camera.capture(stream, "bmp")
-    camera.stop_preview()
-    data = np.fromstring(stream.getvalue(), dtype='uint8')
-    image = cv2.imdecode(data, 1)
-    #    data = np.asarray(cv2.imread('temp.bmp'), dtype='uint16')
-    data_to_send = np.asarray(image, dtype='uint16')
+        camera.start_preview()
+        time.sleep(5)
+        camera.capture(stream, "bmp")
+        camera.stop_preview()
+        data = np.fromstring(stream.getvalue(), dtype='uint8')
+        image = cv2.imdecode(data, 1)
+        #    data = np.asarray(cv2.imread('temp.bmp'), dtype='uint16')
+        data_to_send = np.asarray(image, dtype='uint16')
+    finally:
+        camera.close()
     return data_to_send
-
 
 def getData():
     z = getCameraStill()
@@ -54,9 +56,23 @@ def waitForClient(sock):
     return connection
 
 
+def getServerID():
+    # Extract serial from the cpuinfo file as the server ID
+    serial = '0000000000000000'
+    try:
+        f = open('/proc/cpuinfo', 'r')
+        for line in f:
+            if line[0:6]=='Serial':
+                serial = line[10:26]
+        f.close()
+    except:
+        serial='ERROR00000000000'
+    return serial
+
+
 def __init__():
-    with open(sys.argv[1]) as f:
-        camera_id = f.readline().zfill(2)
+    camera_id = getServerID().zfill(16)
+    print "GOT CAMERA ID: " + camera_id
     signal.signal(signal.SIGINT, signal_handler)
     print 'starting server ', camera_id
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -74,7 +90,9 @@ def __init__():
             communication.send_img(connection, data)
             print "closing connection"
             connection.close()
-        except:
+        except Exception as e:
+            if hasattr(e, 'message'):
+                print(e.message)
             print "Server failure, resetting connection"
     server_socket.close()
 

@@ -44,12 +44,12 @@ def run(ip, port, output_dir):
     # communication.send_msg(client_socket, communication.DATA_READY_ACK)
     # receive CAMERA_ID
     camera_id = communication.recv_msg(client_socket)
-    camera_id = str(int(camera_id)).zfill(2)  # add leading zeros
+    camera_id = str(camera_id.zfill(16))  # add leading zeros
     print "received ", camera_id
     # send CAMERA_ID_ACK
     print "sending ", communication.CAMERA_ID_ACK
     communication.send_msg(client_socket, communication.CAMERA_ID_ACK)
-    fname = output_dir + '/' + str(camera_id)
+    fname = output_dir + '/' + camera_id
     img = communication.recv_img(client_socket)
     print "received image data"
     cv2.imwrite("%s.bmp" % fname, img)
