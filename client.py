@@ -10,14 +10,15 @@ import os
 from multiprocessing import Process
 import pepi_config
 
+
 # args is a list of tuple
 def run_parallel(func, args):
-    proc = []
+    processes = []
     for arg in args:
         p = Process(target=func, args=arg)
         p.start()
-        proc.append(p)
-    for p in proc:
+        processes.append(p)
+    for p in processes:
         p.join()
 
 
@@ -49,10 +50,10 @@ def run(ip, port, output_dir):
     # send CAMERA_ID_ACK
     print "sending ", communication.CAMERA_ID_ACK
     communication.send_msg(client_socket, communication.CAMERA_ID_ACK)
-    fname = output_dir + '/' + camera_id
+    filename = output_dir + '/' + camera_id
     img = communication.recv_img(client_socket)
     print "received image data"
-    cv2.imwrite("%s.jpg" % fname, img)
+    cv2.imwrite('%s.png' % filename, img)  # Always write to PNG as lossless
     print "closing connection"
     client_socket.close()
 
@@ -64,11 +65,11 @@ def test_run(ip, port):
 
 
 def __init__():
-    dir = "images/" + get_time_stamp()
-    if not os.path.exists(dir):
-        os.makedirs(dir)
+    image_dir = "images/" + get_time_stamp()
+    if not os.path.exists(image_dir):
+        os.makedirs(image_dir)
     ips = get_ip_list()
-    args = [(ip, pepi_config.port, dir) for ip in ips]
+    args = [(ip, pepi_config.port, image_dir) for ip in ips]
     print "Running parallel connections"
     run_parallel(run, args)
 

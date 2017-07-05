@@ -39,28 +39,25 @@ def recvall(sock, n):
     return data
 
 
-def send_img(sock, frame):
-    img_size_str = numpy.asarray(frame.shape, dtype="uint16").tostring()
-    print "sending img_size_str", img_size_str
-    send_msg(sock, img_size_str)
-    # wait for data size ack
-    msg = recv_msg(sock)
-    print "received ", msg
-    img_data_str = frame.flatten().tostring()
-    print "sending length ", len(img_data_str)
+def send_img(sock, frame, compressed_transfer=True, level=90):
+    if compressed_transfer:
+        # Compress the image using OpenCV JPG
+        print 'Image size pre : %10i' % frame.size
+        _, image_data = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, level])
+        print 'Image size post: %10i' % image_data.size
+    else:
+        # Encode to lossless PNG
+        _, image_data = cv2.imencode('.png', frame, [cv2.IMWRITE_PNG_COMPRESSION, level])
+
+    # Transform into string for transfer
+    img_data_str = image_data.flatten().tostring()
+    print 'Sending image of length: ', len(img_data_str)
     send_msg(sock, img_data_str)
 
 
 def recv_img(sock):
-    img_size_str = recv_msg(sock)
-    print "received img_size_str"
-    img_size = tuple(numpy.fromstring(img_size_str, dtype='uint16'))
-    print "image size ", img_size
-    print "sending ", IMG_SIZE_ACK
-    send_msg(sock, IMG_SIZE_ACK)
+    # Receive image string and decode into an Image
     img_data_str = recv_msg(sock)
-    print "received img_data_str"
-
-    img_data  = cv2.imdecode(numpy.fromstring(img_data_str, dtype='uint8'), 1)
-    # img_data = numpy.fromstring(img_data_str, dtype='uint16').reshape(img_size)
-    return img_data
+    print 'Received image of length: ', len(img_data_str)
+    image_data = cv2.imdecode(numpy.fromstring(img_data_str, dtype='uint8'), 1)
+    return image_data

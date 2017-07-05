@@ -2,7 +2,6 @@
 import socket
 import communication
 import time
-import cv2
 import numpy as np
 from picamera import PiCamera
 from picamera.array import PiRGBArray
@@ -29,7 +28,6 @@ def generateRandomImg():
 
 def getCameraStill(resolution=(2592, 1944)):
     startTime = 0
-    stream = io.BytesIO()
     with PiCamera() as camera:
         try:
             print 'Camera warming up..'
@@ -41,16 +39,10 @@ def getCameraStill(resolution=(2592, 1944)):
             with PiRGBArray(camera) as rawCapture:
                 camera.capture(rawCapture, format='bgr')
                 image = rawCapture.array
-                print 'Image dim. (pre-comp):' + str(image.shape)
-                _, imageData = cv2.imencode('compressed.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 80])
         finally:
             camera.close()
             print 'Active capture time: ' + str(round((time.time() - startTime), 4)) + 'seconds'
-    return imageData
-
-def getData():
-    z = getCameraStill()
-    return z
+    return image
 
 
 def waitForClient(sock):
@@ -65,36 +57,41 @@ def waitForClient(sock):
 def getServerID():
     # Extract serial from the cpuinfo file as the server ID
     serial = '0000000000000000'
+    # noinspection PyBroadException
     try:
         f = open('/proc/cpuinfo', 'r')
         for line in f:
-            if line[0:6]=='Serial':
+            if line[0:6] == 'Serial':
                 serial = line[10:26]
         f.close()
     except:
-        serial='ERROR00000000000'
+        serial = 'ERROR00000000000'
     return serial
 
 
 def __init__():
     camera_id = getServerID().zfill(16)
-    print "GOT CAMERA ID: " + camera_id
     signal.signal(signal.SIGINT, signal_handler)
     print 'starting server ', camera_id
+
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Avoids TCP timeout waiting on crash
     server_socket.bind(("", pepi_config.port))
     server_socket.listen(5)
 
     while run_condition:
         try:
             connection = waitForClient(server_socket)
+
             print "sending ", camera_id
             communication.send_msg(connection, camera_id)
+
             print "received ", communication.recv_msg(connection)
-            data = getData()
+
+            data = getCameraStill()
             print "sending image data"
-            communication.send_img(connection, data)
+            communication.send_img(connection, data, compressed_transfer=True, level=3)
+
             print "closing connection"
             connection.close()
         except Exception as e:
