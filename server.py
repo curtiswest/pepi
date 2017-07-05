@@ -1,9 +1,11 @@
+#!/usr/bin/python
 import socket
 import communication
 import time
 import cv2
 import numpy as np
 from picamera import PiCamera
+from picamera.array import PiRGBArray
 import sys
 import signal
 import io
@@ -25,22 +27,26 @@ def generateRandomImg():
     return z
 
 
-def getCameraStill():
+def getCameraStill(resolution=(2592, 1944)):
+    startTime = 0
     stream = io.BytesIO()
-    camera = PiCamera()
-    try:
-        camera.resolution = (2592, 1944)
-        camera.start_preview()
-        time.sleep(5)
-        camera.capture(stream, "bmp")
-        camera.stop_preview()
-        data = np.fromstring(stream.getvalue(), dtype='uint8')
-        image = cv2.imdecode(data, 1)
-        #    data = np.asarray(cv2.imread('temp.bmp'), dtype='uint16')
-        data_to_send = np.asarray(image, dtype='uint16')
-    finally:
-        camera.close()
-    return data_to_send
+    with PiCamera() as camera:
+        try:
+            print 'Camera warming up..'
+            camera.resolution = resolution
+            camera.start_preview()
+            time.sleep(3)
+            startTime = time.time()
+            print 'Camera warmed. Capturing..'
+            with PiRGBArray(camera) as rawCapture:
+                camera.capture(rawCapture, format='bgr')
+                image = rawCapture.array
+                print 'Image dim. (pre-comp):' + str(image.shape)
+                _, imageData = cv2.imencode('compressed.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        finally:
+            camera.close()
+            print 'Active capture time: ' + str(round((time.time() - startTime), 4)) + 'seconds'
+    return imageData
 
 def getData():
     z = getCameraStill()
@@ -76,6 +82,7 @@ def __init__():
     signal.signal(signal.SIGINT, signal_handler)
     print 'starting server ', camera_id
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind(("", pepi_config.port))
     server_socket.listen(5)
 

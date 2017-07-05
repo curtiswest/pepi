@@ -1,5 +1,6 @@
 import numpy
 import struct
+import cv2
 
 MSGLEN = 512
 CLIENT_READY = "client ready"
@@ -40,11 +41,11 @@ def recvall(sock, n):
 
 def send_img(sock, frame):
     img_size_str = numpy.asarray(frame.shape, dtype="uint16").tostring()
-    print "sending img_size_str", frame.shape
+    print "sending img_size_str", img_size_str
     send_msg(sock, img_size_str)
     # wait for data size ack
     msg = recv_msg(sock)
-    print "rceived ", msg
+    print "received ", msg
     img_data_str = frame.flatten().tostring()
     print "sending length ", len(img_data_str)
     send_msg(sock, img_data_str)
@@ -59,5 +60,7 @@ def recv_img(sock):
     send_msg(sock, IMG_SIZE_ACK)
     img_data_str = recv_msg(sock)
     print "received img_data_str"
-    img_data = numpy.fromstring(img_data_str, dtype='uint16').reshape(img_size)
+
+    img_data  = cv2.imdecode(numpy.fromstring(img_data_str, dtype='uint8'), 1)
+    # img_data = numpy.fromstring(img_data_str, dtype='uint16').reshape(img_size)
     return img_data

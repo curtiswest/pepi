@@ -52,7 +52,7 @@ def run(ip, port, output_dir):
     fname = output_dir + '/' + camera_id
     img = communication.recv_img(client_socket)
     print "received image data"
-    cv2.imwrite("%s.bmp" % fname, img)
+    cv2.imwrite("%s.jpg" % fname, img)
     print "closing connection"
     client_socket.close()
 
