@@ -7,98 +7,124 @@ from picamera import PiCamera
 from picamera.array import PiRGBArray
 import sys
 import signal
-import io
 import pepi_config
-
-run_condition = True
-
-
-def signal_handler(signal, frame):
-    print('Exiting...')
-    global run_condition
-    run_condition = False
-    sys.exit(0)
+import atexit
 
 
-def generateRandomImg():
+def generate_random_img():
     z = np.random.random((2592, 1944))  # Test data
     print z.dtype
     return z
 
 
-def getCameraStill(resolution=(2592, 1944)):
-    startTime = 0
-    with PiCamera() as camera:
+class Server:
+    run_condition = True
+    camera_instance = None
+    active_connection = None
+    server_socket = None
+    server_id = ""
+
+    def exit_handler(self):
+        print "Exit Handler: cleaning up.."
+        if self.camera_instance is not None:
+            print "Exit Handler: closing camera.."
+            self.camera_instance.close()
+        if self.active_connection is not None:
+            print "Exit Handler: closing active connection.."
+            self.active_connection.close()
+        if self.server_socket is not None:
+            print "Exit Handler: closing server socket.."
+            self.server_socket.close()
+        print "Exit Handler: complete & exiting."
+
+    @staticmethod
+    def signal_handler(self, signal, frame):
+        print('\n Exiting...')
+        sys.exit(0)
+
+    @staticmethod
+    def get_camera_singleton(resolution=(2592, 1944)):
+        camera = PiCamera()
         try:
-            print 'Camera warming up..'
             camera.resolution = resolution
             camera.start_preview()
+            print 'Camera warming up..'
             time.sleep(3)
-            startTime = time.time()
-            print 'Camera warmed. Capturing..'
-            with PiRGBArray(camera) as rawCapture:
-                camera.capture(rawCapture, format='bgr')
-                image = rawCapture.array
-        finally:
-            camera.close()
-            print 'Active capture time: ' + str(round((time.time() - startTime), 4)) + 'seconds'
-    return image
+            print 'Camera active.'
+        except:
+            raise
+        return camera
 
+    def get_camera_still(self):
+        start_time = time.time()
+        with PiRGBArray(self.camera_instance) as rawCapture:
+            self.camera_instance.capture(rawCapture, format='bgr')
+            image = rawCapture.array
+            print 'Capture took: %.3f sec' % (time.time() - start_time)
+            return image
 
-def waitForClient(sock):
-    connection, address = sock.accept()
-    print "sending ", communication.SERVER_READY
-    communication.send_msg(connection, communication.SERVER_READY)
-    msg = communication.recv_msg(connection)
-    print "received ", msg
-    return connection
+    @staticmethod
+    def wait_for_client(sock):
+        connection, address = sock.accept()
+        print "sending ", communication.SERVER_READY
+        communication.send_msg(connection, communication.SERVER_READY)
+        msg = communication.recv_msg(connection)
+        print "received ", msg
+        return connection
 
-
-def getServerID():
-    # Extract serial from the cpuinfo file as the server ID
-    serial = '0000000000000000'
-    # noinspection PyBroadException
-    try:
-        f = open('/proc/cpuinfo', 'r')
-        for line in f:
-            if line[0:6] == 'Serial':
-                serial = line[10:26]
-        f.close()
-    except:
-        serial = 'ERROR00000000000'
-    return serial
-
-
-def __init__():
-    camera_id = getServerID().zfill(16)
-    signal.signal(signal.SIGINT, signal_handler)
-    print 'starting server ', camera_id
-
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Avoids TCP timeout waiting on crash
-    server_socket.bind(("", pepi_config.port))
-    server_socket.listen(5)
-
-    while run_condition:
+    @staticmethod
+    def get_server_id():
+        # Extract serial from the cpuinfo file as the server ID
+        serial = '0000000000000000'
         try:
-            connection = waitForClient(server_socket)
+            f = open('/proc/cpuinfo', 'r')
+            for line in f:
+                if line[0:6] == 'Serial':
+                    serial = line[10:26]
+            f.close()
+        except:
+            serial = 'ERROR00000000000'
+        finally:
+            return serial
 
-            print "sending ", camera_id
-            communication.send_msg(connection, camera_id)
+    def __init__(self):
+        # Setup Server variables
+        self.server_id = self.get_server_id().zfill(16)
+        signal.signal(signal.SIGINT, self.signal_handler)
+        print 'SERVER START: ', self.server_id
+        self.camera_instance = self.get_camera_singleton()
+        atexit.register(self.exit_handler)
 
-            print "received ", communication.recv_msg(connection)
+        # Setup communication socket
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Avoids TCP timeout waiting on crash
+        self.server_socket.bind(("", pepi_config.port))
+        self.server_socket.listen(5)
 
-            data = getCameraStill()
-            print "sending image data"
-            communication.send_img(connection, data, compressed_transfer=True, level=3)
+        # Start listening for connecting clients
+        while self.run_condition:
+            try:
+                self.active_connection = self.wait_for_client(self.server_socket)
+                print("Temp Connection: now active")
 
-            print "closing connection"
-            connection.close()
-        except Exception as e:
-            if hasattr(e, 'message'):
-                print(e.message)
-            print "Server failure, resetting connection"
-    server_socket.close()
+                print "sending from ", self.server_id
+                communication.send_msg(self.active_connection, self.server_id)
+
+                print "received ", communication.recv_msg(self.active_connection)
+                print "sending image data"
+                communication.send_img(self.active_connection, self.get_camera_still(), compressed_transfer=False,
+                                       level=3)
+            except Exception as e:
+                if hasattr(e, 'message'):
+                    print(e.message)
+                print "Server failure, exiting"
+                return # Will call exit_handler
+            finally:
+                # Clean up the current temporary connection
+                if self.active_connection is not None:
+                    self.active_connection.close()
+                    print("Temp Connection: now closed")
+                    self.active_connection = None
 
 
-__init__()
+s = Server()
