@@ -40,14 +40,37 @@ def recvall(sock, n):
 
 
 def send_img(sock, frame, compressed_transfer=True, level=90):
+    """
+    Sends an image (frame) over the given socket, compressed as JPG by default.
+
+    If using specifying non-standard compression parameters, or the use of uncompressed
+    transfers, take special note of the compression levels. By default, JPG compression
+    at 90 out of 100 is used which is satisfactory for most cases. However, you may
+    use any value between 0 and 100 at the detriment of quality or transfer speed.
+
+    Uncompressed images (i.e. compress_transfer=False) use PNG lossless compression. This
+    still uses a compression level between 0 and 9, but instead refers to the time taken
+    to compress, with 0 being fast compression, larger file and 9 longer time, smaller
+    file.
+
+    :param sock: the transfer socket
+    :param frame: the image to transfer (OpenCV2 image, i.e. BGR array)
+    :param compressed_transfer: whether to compress during transfer
+    :param level: what level of compression to use, 0-100 (highest) for JPG or 0-9 (smaller file, longer) for PNG
+    """
+    image_data = None
     if compressed_transfer:
         # Compress the image using OpenCV JPG
-        print 'Image size pre : %10i' % frame.size
-        _, image_data = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, level])
-        print 'Image size post: %10i' % image_data.size
+        if 0 <= level <= 100:
+            _, image_data = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, level])
+        else:
+            raise ValueError('JPG compression level must be between 0 and 100')
     else:
         # Encode to lossless PNG
-        _, image_data = cv2.imencode('.png', frame, [cv2.IMWRITE_PNG_COMPRESSION, level])
+        if 0 <= level <= 9:
+            _, image_data = cv2.imencode('.png', frame, [cv2.IMWRITE_PNG_COMPRESSION, level])
+        else:
+            raise ValueError('PNG compression level must be between 0 and 9')
 
     # Transform into string for transfer
     img_data_str = image_data.flatten().tostring()

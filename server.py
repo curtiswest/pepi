@@ -22,6 +22,8 @@ class Server:
     camera_instance = None
     active_connection = None
     server_socket = None
+    compressed_transfer = True
+    compression_level = 90
     server_id = ""
 
     def exit_handler(self):
@@ -88,6 +90,12 @@ class Server:
             return serial
 
     def __init__(self):
+        # Setup communication socket
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Avoids TCP timeout waiting on crash
+        self.server_socket.bind(("", pepi_config.port))
+        self.server_socket.listen(5)
+
         # Setup Server variables
         self.server_id = self.get_server_id().zfill(16)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -95,30 +103,25 @@ class Server:
         self.camera_instance = self.get_camera_singleton()
         atexit.register(self.exit_handler)
 
-        # Setup communication socket
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Avoids TCP timeout waiting on crash
-        self.server_socket.bind(("", pepi_config.port))
-        self.server_socket.listen(5)
-
         # Start listening for connecting clients
         while self.run_condition:
             try:
                 self.active_connection = self.wait_for_client(self.server_socket)
                 print("Temp Connection: now active")
 
-                print "sending from ", self.server_id
+                print "Sending image from ", self.server_id
                 communication.send_msg(self.active_connection, self.server_id)
 
-                print "received ", communication.recv_msg(self.active_connection)
-                print "sending image data"
-                communication.send_img(self.active_connection, self.get_camera_still(), compressed_transfer=False,
-                                       level=3)
+                print "Received: ", communication.recv_msg(self.active_connection)
+                print "Sending image data.."
+                communication.send_img(self.active_connection, self.get_camera_still(),
+                                       self.compressed_transfer, self.compression_level)
+                print "Sent image data."
             except Exception as e:
                 if hasattr(e, 'message'):
                     print(e.message)
                 print "Server failure, exiting"
-                return # Will call exit_handler
+                exit() # Will call exit_handler
             finally:
                 # Clean up the current temporary connection
                 if self.active_connection is not None:
