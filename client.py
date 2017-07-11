@@ -1,14 +1,17 @@
-#!/usr/bin/python
+#!/usr/local/opt/pyenv/shims/python
 # TCP client example
 
 import socket
-import communication
+# import communication
 import datetime
 import time
+# import numpy as np
 import cv2
 import os
 from multiprocessing import Process
 import pepi_config
+import communication_new as comm
+import zmq
 
 
 # args is a list of tuple
@@ -34,28 +37,22 @@ def get_ip_list():
 
 
 def run(ip, port, output_dir):
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((ip, port))
-    # receive SERVER_READY
-    msg = communication.recv_msg(client_socket)
-    print "received ", msg
-    # send CLIENT_READY
-    print "sending ", communication.CLIENT_READY
-    communication.send_msg(client_socket, communication.CLIENT_READY)
-    # communication.send_msg(client_socket, communication.DATA_READY_ACK)
-    # receive CAMERA_ID
-    camera_id = communication.recv_msg(client_socket)
-    camera_id = str(camera_id.zfill(16))  # add leading zeros
-    print "received ", camera_id
-    # send CAMERA_ID_ACK
-    print "sending ", communication.CAMERA_ID_ACK
-    communication.send_msg(client_socket, communication.CAMERA_ID_ACK)
+    c = comm.CommunicationSocket(zmq.REQ)
+    addr = "tcp://{}:{}".format(ip, port)
+    print('Connecting to {}'.format(addr))
+    c.connect_to(addr)
+
+    message = c.get_new_pepimessage()
+    message.command.command = comm.pepimessage_pb2.Command.GET_STILL
+    c.send_protobuf(message)
+    print('Sent..')
+
+    pb = c.receive_protobuf()
+    img = comm.CommunicationSocket.decode_image(pb.image.img_data_str)
+    camera_id = pb.image.server_id
+    print(camera_id)
     filename = output_dir + '/' + camera_id
-    img = communication.recv_img(client_socket)
-    print "received image data"
     cv2.imwrite('%s.png' % filename, img)  # Always write to PNG as lossless
-    print "closing connection"
-    client_socket.close()
 
 
 def test_run(ip, port):

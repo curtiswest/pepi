@@ -1,6 +1,6 @@
 #!/usr/bin/python
 import socket
-import communication
+# import communication
 import time
 import numpy as np
 from picamera import PiCamera
@@ -9,7 +9,9 @@ import sys
 import signal
 import pepi_config
 import atexit
-
+import traceback
+import communication_new as comm
+import zmq
 
 def generate_random_img():
     z = np.random.random((2592, 1944))  # Test data
@@ -21,7 +23,7 @@ class Server:
     run_condition = True
     camera_instance = None
     active_connection = None
-    server_socket = None
+    server_comm = comm.CommunicationSocket(zmq.REP)
     compressed_transfer = True
     compression_level = 90
     server_id = ""
@@ -31,12 +33,6 @@ class Server:
         if self.camera_instance is not None:
             print "Exit Handler: closing camera.."
             self.camera_instance.close()
-        if self.active_connection is not None:
-            print "Exit Handler: closing active connection.."
-            self.active_connection.close()
-        if self.server_socket is not None:
-            print "Exit Handler: closing server socket.."
-            self.server_socket.close()
         print "Exit Handler: complete & exiting."
 
     @staticmethod
@@ -91,10 +87,9 @@ class Server:
 
     def __init__(self):
         # Setup communication socket
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Avoids TCP timeout waiting on crash
-        self.server_socket.bind(("", pepi_config.port))
-        self.server_socket.listen(5)
+        addr = "tcp://*:{}".format(pepi_config.port)
+        print('Binding to {}'.format(addr))
+        self.server_comm.bind_to(addr)
 
         # Setup Server variables
         self.server_id = self.get_server_id().zfill(16)
@@ -104,30 +99,27 @@ class Server:
         atexit.register(self.exit_handler)
 
         # Start listening for connecting clients
-        while self.run_condition:
-            try:
-                self.active_connection = self.wait_for_client(self.server_socket)
-                print("Temp Connection: now active")
+        while True:
+            # Get the command from a client
+            print('Waiting for message..')
+            msg = self.server_comm.receive_protobuf()
+            print('Got message: {}'.format(msg))
 
-                print "Sending image from ", self.server_id
-                communication.send_msg(self.active_connection, self.server_id)
-
-                print "Received: ", communication.recv_msg(self.active_connection)
-                print "Sending image data.."
-                communication.send_img(self.active_connection, self.get_camera_still(),
-                                       self.compressed_transfer, self.compression_level)
-                print "Sent image data."
-            except Exception as e:
-                if hasattr(e, 'message'):
-                    print(e.message)
-                print "Server failure, exiting"
-                exit() # Will call exit_handler
-            finally:
-                # Clean up the current temporary connection
-                if self.active_connection is not None:
-                    self.active_connection.close()
-                    print("Temp Connection: now closed")
-                    self.active_connection = None
+            # Process command and reply to client
+            reply = comm.CommunicationSocket.get_new_pepimessage()
+            if msg.HasField("command"):
+                print('Got a command: {}'.format(msg.command))
+                # Handle different command cases
+                if msg.command.command == comm.pepimessage_pb2.Command.GET_STILL:
+                    image = self.get_camera_still()
+                    image = comm.CommunicationSocket.encode_image(image, 90)
+                    reply.image.img_data_str = image
+                    reply.image.server_id = self.server_id
+                    print self.server_comm.send_protobuf(reply)
+                else:
+                    pass
+            else:
+                print('ERROR: Server received an image!')
 
 
 s = Server()
