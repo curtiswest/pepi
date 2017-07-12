@@ -1,250 +1,181 @@
-import numpy as np
-import struct
+import zmq
 import cv2
-import socket
-import binascii
-
-MSGLEN = 512
-CLIENT_READY = "client ready"
-SERVER_READY = "server ready"
-DATA_RECEIVED = "data received"
-DATA_READY = "data ready"
-DATA_READY_ACK = "data ready ack"
-CAMERA_ID_ACK = "camera id ack"
-IMG_SIZE_ACK = "image size ack"
-
-class SocketError(Exception):
-    pass
-
-def wait_for_msg(sock):
-    """
-    Waits for a message on the socket indicated by the presence of at least 4 bytes on available on the socket. Those
-    four bytes are decoded into the
-
-    Caution: this is a blocking function which will wait only return on socket disconnect or when 4 bytes are received.
-
-    Args:
-        sock: the socket on which to wait for a message
-
-    Returns:
-        the length of the message incoming message in bytes
-
-    Raises:
-        SocketError: when connection is lost/closed on the socket while waiting for a message
-    """
-    try:
-        raw_msg_len = recvall(sock, 4)  # Get first 4 bytes (length of remaining message)
-        msg_len = struct.unpack('>L', raw_msg_len)[0]  # Unpack to get real message length
-        return msg_len
-    except:
-        raise
+import msg.pepimessage_pb2 as ppmsg
+import numpy as np
+import google.protobuf
 
 
-def generate_format_string(values_to_pack):
-    """
-    Generates a format string used for packing strings, ints and long into strings with the `struct` module.
+class CommunicationSocket:
+    _context = zmq.Context()
+    _socket = None
+    _type = None
 
-    Args:
-        values_to_pack: a list containing ints, long or strings to generate the format string for
+    class SocketTypes:
+        """
+            Indicates the type of CommunicationSocket this instance is and therefore which messages are associated
+            with the send() and receive() functions.
+        """
+        SERVER = zmq.REP
+        CLIENT = zmq.REQ
 
-    Returns:
-        str: the format string
-    """
-    format_string = '>'
-    if not isinstance(values_to_pack, (list,tuple)):
-        values_to_pack = [values_to_pack]
+    class MessageTypeError(Exception):
+        pass
 
-    for value in values_to_pack:
-        if isinstance(value, str):
-            format_string += (str(len(value)) + 's')
-        elif isinstance(value, (int,long)):
-            format_string += 'L'
+    class ServerTypeError(Exception):
+        pass
+
+    def __init__(self, socket_type):
+        self._type = socket_type
+        self._socket = self._context.socket(socket_type=socket_type)
+
+    def bind_to(self, address):
+        """
+        Binds this socket to the given address. Typically used on the server-side, although in practical terms there is
+        little difference between bind_to() and connect_to()
+
+        Args:
+            address (str): the address string to bind to. Format is "protocol://interface:port" e.g. "tcp://*:10000".
+                See ZMQ's bind() function for more details on the format of the address string.
+        """
+        return self._socket.bind(address)
+
+    def connect_to(self, address):
+        """
+        Connects to a socket at the given address. Typically used on client-side, although in practical terms there is
+        little difference between connect_to() and bind_to().
+
+        Args:
+            address: the address string to bind to. Format is "protocol://interface:port" e.g. "tcp://*:10000".
+                See ZMQ's bind(addr) function for more details on the format of the address string.
+        """
+        return self._socket.connect(address)
+
+    def _send_raw(self, message):
+        return self._socket.send(message)
+
+    def _receive_raw(self):
+        return self._socket.recv()
+
+    def send(self, command, int_values=None, string_values=None, image_data=None, server_id=None):
+        # type: (str, list[int], list[str], str, str) -> object
+        """
+        Sends the given command and values on the wire that this socket is connected to.
+
+        Note: only zero or one of int_values, string_values and image_data can be specified, as the underlying
+        implementation only supports sending one of these over the wire. If image_data is specified, server_id must
+        also be specified or a TypeError will be raised.
+
+        Args:
+            command (int): a command as given in pepimessage_pb2, e.g. pepimessage_pb2.GET_SERVER_ID
+            int_values ([int]): a list of integer values associated with the command, if needed
+            string_values ([str]): a list of string values associated with the command, if needed
+            image_data (str): a image data string, if needed
+            server_id (str): the ID of the server sending the image data, if needed
+
+        Raises:
+            ValueError: when command is None, or when a server_id or image_data is specified with the other
+            counterpart set to None.
+            ServerTypeError: when a Client-type socket attempts to send a message or value that only a Server-type
+            socket is capable of.
+            MessageTypeError: when attempting to send more than 1 of the following: int_values, string_values or
+            image_data.
+
+        """
+
+        def wrap_to_list(values):
+            return values if isinstance(values, list) else [values]
+
+        # Check given appropriate parameters
+        if bool(int_values) + bool(string_values) + bool(image_data) > 1:
+            raise self.MessageTypeError('Given {} of 3 value parameters, but can only handle <=1 per call'.format(
+                bool(int_values) + bool(string_values) + bool(image_data)))
+        if command is None:
+            raise ValueError('Command cannot be None')
+
+        # Generate and load the message depending on what type of socket this is
+        if self._type == self.SocketTypes.SERVER:
+            msg = ppmsg.Reply()
+            # Servers may send image data, so need to load in here
+            if image_data is not None or server_id is not None:
+                if bool(image_data) ^ bool(server_id):
+                    # One is set but not the other which is invalid
+                    raise ValueError('Server_id and image_data must be sent together as per the message protocol.'
+                                     'One of these two was not provided in this function call.')
+                msg.image.img_data_str = image_data
+                msg.image.server_id = server_id
+        elif self._type == self.SocketTypes.CLIENT:
+            msg = ppmsg.Request()
+            if image_data is not None or server_id is not None:
+                raise self.ServerTypeError('Attempting to send image data from a client-type server')
         else:
-            raise ValueError('Format strings can only be generated for int, long and string types.')
-    return format_string
+            msg = None
 
-def send_command(sock, command, values=None):
-    """
-    Sends a command as a binary-packed string over the given socket with the given optional values.
+        msg.command = command
+        if int_values is not None:
+            msg.int_values.values.extend(wrap_to_list(int_values))
+        elif string_values is not None:
+            msg.string_values.values.extend(wrap_to_list(string_values))
 
-    Args:
-        sock (socket): the socket over which the command will be sent
-        command (int): a one-dimension list or tuple of int values associated with the command.
-        values ([int or long or str]): the values to send along with the `command`. `Values` must be a single-dimension
-            list or tuple with each element being one of the following types: int, long, string. Defaults to None.
-
-    Returns:
-        None: on success
-
-    Raises:
-        ValueError: when at least one of the elements of `values` is not of type int, long, string or when it is
-            multi-dimensional (e.g. a list) and therefore cannot be packed.
-        SocketError: when an error occurs during transmission over the socket. An unspecified amount of data may have
-            been sent over the socket before the error is raised.
-    """
-    def _check_types_of(_values):
-        if not all(isinstance(x, (int, long, str)) for x in _values):
-            raise ValueError('{} contains an element that is a not of type int, long, or string '.format(_values) +
-                             'or alternatively is a list or tuple. The list of values must take that format.')
-
-    values_to_pack = [command]
-    if values is not None:
-        if not isinstance(values, (list, tuple)):
-            values = [values] # Must be in a list before checking and packing
-        _check_types_of(values)
-        values_to_pack.extend(values)
-
-    try:
-        # The packed data being sent to the send_msg function is a binary-packed string of the format:
-        #   fmt_string_len : 4 bytes representing length (z bytes) of the format string to unpack
-        #   fmt_string: z bytes containing the format string to unpack the rest of the message
-        #   remaining message: remaining bytes up to msg_len, unpacked with the format_string where:
-        #       cmd: the first element in the unpacked message i.e. [0]
-        #       values: the remaining elements in the unpacked message i.e. [1:]
-        fmt_string = generate_format_string(values_to_pack)
-        values_to_pack = [fmt_string] + values_to_pack
-        values_to_pack = [len(fmt_string)] + values_to_pack
-        fmt_string = generate_format_string(values_to_pack)
-        packed_data = struct.pack(fmt_string, *values_to_pack)
-        send_msg(sock, packed_data)
-    except:
-        raise
-
-def recv_command(sock, msg_len=None):
-    """
-    Receives a command and any associated values over the `socket`.
-
-    Args:
-        sock: the socket over which the command will be received
-        msg_len: the length of the message to receive in bytes. Defaults to None, in which case the function will call
-            wait_for_msg on this socket to retrieve a message length (which will make this function block).
-
-    Returns:
-        (cmd (int), values ([])): a tuple where the first element is the received command, and the second is
-            a list of values (of type int, long, or string) received, if any.
-
-    Raises:
-        SocketError: when an error occurs while receiving the packed message
-        struct.error: when an error occurs during unpacked the message, presumably because it has been encoding incorrectly
-            or corrupted at some stage.
-    """
-    # If not given a message length, then wait for an incoming message
-    if msg_len is None:
-        msg_len = wait_for_msg(sock)
-
-    # Now, retrieve remaining message of length msg_len
-    packed_msg = recvall(sock, msg_len)
-    if packed_msg is None:
-        raise SocketError('Reached end of socket ')
-
-    try:
-        # Recall that a command message is a binary-packed string of the format:
-        #   msg_len : 4 bytes
-        #   fmt_string_len : 4 bytes representing length (z bytes) of the format string to unpack
-        #   fmt_string: z bytes containing the format string to unpack the rest of the message
-        #   remaining message: remaining bytes up to msg_len, unpacked with the format_string where:
-        #       cmd: the first element in the unpacked message i.e. [0]
-        #       values: the remaining elements in the unpacked message i.e. [1:]
-        # As such, it is necessary to step through the received message and pull out each of the above in order.
-        fmt_string_len = struct.unpack('>L', packed_msg[0:4])[0]
-        packed_msg = packed_msg[4:]  # Move forward
-        fmt_string = struct.unpack('>' + str(fmt_string_len) + 's', packed_msg[:fmt_string_len])[0]
-        packed_msg = packed_msg[fmt_string_len:]
-        unpacked_msg = struct.unpack(fmt_string, packed_msg)
-        cmd = unpacked_msg[0]
-        values = unpacked_msg[1:]
-    except:
-        raise
-    return (cmd, values)
-
-
-def send_msg(sock, msg):
-    # Prefix each message with a 4-byte length (network byte order)
-    msg = struct.pack('>L', len(msg)) + msg
-    try:
-        sock.sendall(msg)
-    except:
-        raise SocketError('Error when sending message (b"{}")'.format(binascii.hexlify(msg)))
-
-def recv_msg(sock):
-    # Read message length and unpack it into an integer
-    raw_msglen = recvall(sock, 4)
-    if not raw_msglen:
-        raise SocketError('Socket error occurred when receiving message')
-    msglen = struct.unpack('>L', raw_msglen)[0]
-    # Read the message data
-    return recvall(sock, msglen)
-
-
-def recvall(sock, n):
-    # Helper function to recv n bytes or return None if EOF is hit
-    data = ''
-    while len(data) < n:
+        # Send the reply
         try:
-            packet = sock.recv(n - len(data))
-            if not packet:
-                raise SocketError('Socket error occurred using recvall to receive message of length {} bytes.'.format(n))
-            data += packet
-        except socket.error:
-            raise SocketError('Socket error occurred using recvall to receive message of length {} bytes.'.format(n))
-    return data
+            return self._send_raw(msg.SerializeToString())
+        except:
+            raise
 
+    def close(self):
+        self._socket.close()
+        self._context.term()
 
-def send_img(sock, frame, compressed_transfer=True, level=90):
-    """
-    Sends an image (frame) over the given socket, compressed as JPG by default.
+    def receive(self):
+        # type: () -> (int, list[int], list[str], str, str)
+        """
+        Receives a command message over the wire and returns the values extracted from it.
+        Returns:
+            message (int, [int], [str], str, str): a tuple containing any values received from in the
+            message in the form of (command, int_values, str_values, img_data_str, server_id). Note that the same
+            restrictions as sending a message still apply and so several of these values may be None or empty lists.
 
-    If using specifying non-standard compression parameters, or the use of uncompressed
-    transfers, take special note of the compression levels. By default, JPG compression
-    at 90 out of 100 is used which is satisfactory for most cases. However, you may
-    use any value between 0 and 100 at the detriment of quality or transfer speed.
+        """
 
-    Uncompressed images (i.e. compress_transfer=False) use PNG lossless compression. This
-    still uses a compression level between 0 and 9, but instead refers to the time taken
-    to compress, with 0 being fast compression, larger file and 9 longer time, smaller
-    file.
+        def unwrap_to_list(item):
+            if isinstance(item, google.protobuf.internal.containers.RepeatedScalarFieldContainer):
+                if len(item) > 0:
+                    conv_type = int if isinstance(item[0], int) else str
+                    return [conv_type(i) for i in item]
+                else:
+                    return None
+            elif isinstance(item, list):
+                return item
+            else:
+                return [item]
 
-    Args:
-        sock (socket): the socket to transfer over
-        frame (cv2.image): the image to transfer in OpenCV2 image format, i.e. a BGR array
-        compressed_transfer (bool): whether to compress during transfer
-        level (int):  what level of compression to use, 0-100 (highest) for JPG or 0-9 (smaller file, longer) for PNG
+        data = self._receive_raw()
+        try:
+            if self._type == self.SocketTypes.SERVER:
+                # Reconstruct a request message
+                pb = ppmsg.Request()
+                pb.ParseFromString(data)
+                return pb.command, pb.int_values, pb.string_values
+            elif self._type == self.SocketTypes.CLIENT:
+                pb = ppmsg.Reply()
+                pb.ParseFromString(data)
 
-    Returns:
-        None: on success
-    """
-    image_data = None
-    if compressed_transfer:
-        # Compress the image using OpenCV JPG
-        if 0 <= level <= 100:
-            _, image_data = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, level])
+                int_out = unwrap_to_list(pb.int_values.values)
+                str_out = unwrap_to_list(pb.string_values.values)
+                img_data_str_out = pb.image.img_data_str
+                server_id_out = pb.image.server_id
+                return pb.command, int_out, str_out, img_data_str_out, server_id_out
+        except:
+            raise
+
+    @staticmethod
+    def encode_image(image, compressed=True, level=90):
+        if compressed:
+            _, image_data = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, level])
         else:
-            raise ValueError('JPG compression level must be between 0 and 100')
-    else:
-        # Encode to lossless PNG
-        if 0 <= level <= 9:
-            _, image_data = cv2.imencode('.png', frame, [cv2.IMWRITE_PNG_COMPRESSION, level])
-        else:
-            raise ValueError('PNG compression level must be between 0 and 9')
+            _, image_data = cv2.imencode('.png', image, [cv2.IMWRITE_PNG_COMPRESSION, level])
+        return image_data.flatten().tostring()
 
-    # Transform into string for transfer
-    img_data_str = image_data.flatten().tostring()
-    print 'Sending image of length: ', len(img_data_str)
-    send_msg(sock, img_data_str)
-
-
-def recv_img(sock):
-    """
-    Receives an image over the given socket and decodes it into an OpenCV2 style image (i.e. a BGR array)
-
-    Args:
-        sock(socket): the socket over which to receive the image
-
-    Returns:
-        [[int, int, int]]: the BGR array holding the OpenCV2 image
-    """
-    # Receive image string and decode into an Image
-    img_data_str = recv_msg(sock)
-    print 'Received image of length: ', len(img_data_str)
-    image_data = cv2.imdecode(np.fromstring(img_data_str, dtype='uint8'), 1)
-    return image_data
+    @staticmethod
+    def decode_image(image_data_str):
+        return cv2.imdecode(np.fromstring(image_data_str, dtype='uint8'), 1)

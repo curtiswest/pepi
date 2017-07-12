@@ -1,17 +1,13 @@
 #!/usr/local/opt/pyenv/shims/python
 # TCP client example
 
-import socket
-# import communication
 import datetime
 import time
-# import numpy as np
 import cv2
 import os
 from multiprocessing import Process
 import pepi_config
-import communication_new as comm
-import zmq
+import communication as comm
 
 
 # args is a list of tuple
@@ -37,22 +33,28 @@ def get_ip_list():
 
 
 def run(ip, port, output_dir):
-    c = comm.CommunicationSocket(zmq.REQ)
+    c = comm.CommunicationSocket(comm.CommunicationSocket.SocketTypes.CLIENT)
     addr = "tcp://{}:{}".format(ip, port)
     print('Connecting to {}'.format(addr))
     c.connect_to(addr)
 
-    message = c.get_new_pepimessage()
-    message.command.command = comm.pepimessage_pb2.Command.GET_STILL
-    c.send_protobuf(message)
-    print('Sent..')
+    c.send(comm.ppmsg.GET_STILL)
+    # c.send(comm.ppmsg.GET_SERVER_ID)
+    (cmd, int_list, str_list, img_data_str, server_id) = c.receive()
 
-    pb = c.receive_protobuf()
-    img = comm.CommunicationSocket.decode_image(pb.image.img_data_str)
-    camera_id = pb.image.server_id
-    print(camera_id)
-    filename = output_dir + '/' + camera_id
-    cv2.imwrite('%s.png' % filename, img)  # Always write to PNG as lossless
+    if cmd != comm.ppmsg.COMMAND_FAILURE:
+        if cmd == comm.ppmsg.GET_STILL:
+            img = comm.CommunicationSocket.decode_image(img_data_str)
+            filename = output_dir + '/' + server_id
+            cv2.imwrite('%s.png' % filename, img)  # Always write to PNG as lossless
+        elif cmd == comm.ppmsg.GET_SERVER_ID:
+            print('Got server ID: {}'.format(str_list[0]))
+        elif cmd == comm.ppmsg.SET_SERVER_ID:
+            print('Server ID successfully updated')
+        else:
+            pass
+    else:
+        print('Command failure')
 
 
 def test_run(ip, port):

@@ -1,7 +1,6 @@
 syntax="proto3";
 
-message Command {
-    enum Cmd {
+enum Command {
         DEFAULT             =  0;
         // Camera Specific Commands
         SET_ISO             =   1;
@@ -36,18 +35,32 @@ message Command {
         COMMAND_FAILURE     = 800;
     }
 
-	Cmd command = 1;
-	repeated int32 values = 2;
-}
-
 message Image {
     bytes img_data_str = 1;
     string server_id = 2;
 }
 
-message PepiMessage {
-    oneof msg {
-        Command command = 1;
-        Image image = 2;
+message IntValues {
+    repeated int32 values = 1;
+}
+
+message StringValues {
+    repeated string values = 1;
+}
+
+message Request {
+    Command command = 1;
+    oneof values {
+        IntValues int_values = 2;
+        StringValues string_values = 3;
+    }
+}
+
+message Reply {
+    Command command = 1;
+    oneof values {
+        IntValues int_values = 2;
+        StringValues string_values = 3;
+        Image image = 4;
     }
 }
