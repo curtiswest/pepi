@@ -7,8 +7,8 @@ enum Command {
         GET_ISO             = 101;
         SET_SHUTTER_SPEED   =   2;
         GET_SHUTTER_SPEED   = 102;
-        GET_BRIGHTNESS      =   3;
-        SET_BRIGHTNESS      = 103;
+        SET_BRIGHTNESS      =   3;
+        GET_BRIGHTNESS      = 103;
         SET_AWB_GAINS       =   4;
         GET_AWB_GAINS       = 104;
         SET_RESOLUTION      =   5;
@@ -19,15 +19,16 @@ enum Command {
         GET_SATURATION      = 107;
         SET_ZOOM            =   8;
         GET_ZOOM            = 108;
+        SET_AWB_MODE        =   9;
+        GET_AWB_MODE        = 109;
         // Server metadata commands
         SET_SERVER_ID       = 200;
         GET_SERVER_ID       = 201;
         ENABLE_COMPRESSION  = 202;
         DISABLE_COMPRESSION = 203;
+        IDENTIFY_SELF       = 204;
         // Image capture commands
         GET_STILL           = 300;
-        STILL_SUCCESS       = 307;
-        STILL_FAILURE       = 308;
         START_STREAM        = 400;
         STOP_STREAM         = 401;
         // General Response codes
@@ -35,32 +36,48 @@ enum Command {
         COMMAND_FAILURE     = 800;
     }
 
-message Image {
-    bytes img_data_str = 1;
-    string server_id = 2;
-}
+// Message type wrappers
 
 message IntValues {
     repeated int32 values = 1;
 }
 
+message FloatValues {
+    repeated float values = 1;
+}
+
 message StringValues {
     repeated string values = 1;
+
 }
 
-message Request {
+// Used messages
+
+message IdentityMessage {
+    string ip = 1;
+    string identifier = 4;
+}
+
+message DataMessage {
+    string data_code = 1;
+    string data_string = 2;
+    bytes data_bytes = 3;
+}
+
+message ControlMessage {
     Command command = 1;
     oneof values {
         IntValues int_values = 2;
         StringValues string_values = 3;
+        FloatValues float_values = 4;
     }
 }
 
-message Reply {
-    Command command = 1;
-    oneof values {
-        IntValues int_values = 2;
-        StringValues string_values = 3;
-        Image image = 4;
+message WrapperMessage {
+    oneof msg {
+        IdentityMessage ident = 1;
+        DataMessage data = 2;
+        ControlMessage control = 3;
     }
+
 }
