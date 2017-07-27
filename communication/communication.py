@@ -58,6 +58,7 @@ class CommunicationSocket(object):
         DEALER = zmq.DEALER
         PUSH = zmq.PUSH
         PULL = zmq.PULL
+        PAIR = zmq.PAIR
 
     # noinspection PyMissingOrEmptyDocstring
     class SocketTypeError(Exception):
@@ -74,6 +75,7 @@ class CommunicationSocket(object):
             raise ValueError("Couldn't construct ZMQ socket. Incorrect socket_type value?")
         self.log = logging.getLogger(__name__)
         self._socket.identity = self.generate_id()
+        self.data_wrapper_class = None
 
     # Socket setup functions
 
@@ -229,14 +231,19 @@ class CommunicationSocket(object):
         Args:
             data:
         """
-        raise NotImplementedError('Writing in a file-like manner not yet supported')
+        if self.type == CommunicationSocket.SocketType.ROUTER:
+            raise CommunicationSocket.SocketTypeError('ROUTERs may not use write function as they require an identity')
+        if self.data_wrapper_class:
+            data = self.data_wrapper_class('stream', data)
+        self.send(message=data)
 
     def flush(self):
         # TODO: implement
         """
         Flushes to this CommunicationSocket in a file-like manner. Not yet implemented.
         """
-        raise NotImplementedError('Flushing in a file-like manner not yet supported')
+        pass
+        # raise NotImplementedError('Flushing in a file-like manner not yet supported')
 
         # PUB/SUB functions
 
@@ -311,6 +318,11 @@ class Poller(object):
         # if not polling_type in {Poller.PollingType.POLLIN}
         self.registered_sockets[str(comm_socket._socket)] = comm_socket
         return self._poller.register(comm_socket._socket, polling_type)
+
+    def unregister(self, comm_socket):
+        if not isinstance(comm_socket, CommunicationSocket):
+            raise TypeError('Comm_socket must be a CommunicationSocket, not {}'.format(type(comm_socket)))
+        return self._poller.unregister(comm_socket._socket)
 
     def poll(self, timeout_ms=None):
         # type: (int) -> list

@@ -10,14 +10,14 @@ class TestPyMsg(unittest.TestCase):
     def ident_message_helper(self, ip=None, identifier=None):
         ident = pymsg.IdentityMessage(ip, identifier)
         self.assertIsInstance(ident.protobuf(), ppmsg.IdentityMessage)
-        wrapped_string = ident.wrapped().serialize()
+        wrapped_string = ident.wrap().serialize()
 
         wrapped_msg = pymsg.WrapperMessage.from_serialized_string(wrapped_string)
         msg = wrapped_msg.unwrap()
         self.assertEqual(msg.ip, ip, 'IP malformed')
         self.assertEqual(msg.identifier, identifier, 'Identifier malformed')
 
-        msg_string = msg.wrapped().serialize()
+        msg_string = msg.wrap().serialize()
         self.assertEqual(wrapped_string, msg_string, 'Protobuf serialisations don\'t match')
 
     def test_ident_message(self):
@@ -44,7 +44,7 @@ class TestPyMsg(unittest.TestCase):
 
         control = pymsg.ControlMessage(command, values)
         self.assertIsInstance(control.protobuf(), ppmsg.ControlMessage)
-        wrapped_string = control.wrapped().serialize()
+        wrapped_string = control.wrap().serialize()
 
         wrapped_msg = pymsg.WrapperMessage.from_serialized_string(wrapped_string)
         msg = wrapped_msg.unwrap()
@@ -56,7 +56,7 @@ class TestPyMsg(unittest.TestCase):
             values = ['']
         self.assertEqual(msg.values, values, 'Values malformed. \nIn : {} \nOut: {}'.format(values, msg.values))
 
-        msg_string = msg.wrapped().serialize()
+        msg_string = msg.wrap().serialize()
         self.assertEqual(wrapped_string, msg_string, 'Protobuf serialisations don\'t match')
 
     def test_control_message(self):
@@ -93,7 +93,7 @@ class TestPyMsg(unittest.TestCase):
     def data_message_test_helper(self, data_code='', data_bytes='', data_string=''):
         data = pymsg.DataMessage(data_code=data_code, data_bytes=data_bytes, data_string=data_string)
         self.assertIsInstance(data.protobuf(), ppmsg.DataMessage)
-        wrapped_string = data.wrapped().serialize()
+        wrapped_string = data.wrap().serialize()
 
         wrapped_msg = pymsg.WrapperMessage.from_serialized_string(wrapped_string)
         msg = wrapped_msg.unwrap()
@@ -102,7 +102,7 @@ class TestPyMsg(unittest.TestCase):
         self.assertEqual(msg.data_bytes, data_bytes, 'Data_bytes malformed')
         self.assertEqual(msg.data_string, data_string, 'Data_string malformed')
 
-        msg_string = msg.wrapped().serialize()
+        msg_string = msg.wrap().serialize()
         self.assertEqual(wrapped_string, msg_string, 'Protobuf serialisations don\'t match')
 
     def test_data_message(self):

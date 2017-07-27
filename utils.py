@@ -5,6 +5,9 @@ import time
 import google.protobuf
 from cv2 import imdecode, imencode, IMWRITE_PNG_COMPRESSION, IMWRITE_JPEG_QUALITY
 import numpy as np
+import uuid
+import random
+import string
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
@@ -21,7 +24,7 @@ def unwrap_to_list(item):
     Args:
         item: the item to be unwrapped in a list
     Returns:
-        list: the item unwrapped appropriately wrapped in a list in native Python types
+        list: the item unwrapped appropriately wrap in a list in native Python types
     """
     if isinstance(item, google.protobuf.internal.containers.RepeatedScalarFieldContainer):
         if len(item) > 0:
@@ -37,12 +40,12 @@ def unwrap_to_list(item):
 
 def wrap_to_list(items):
     """
-    Returns the item guaranteed to be wrapped in a list while not affecting raw strings, or double wrapping lists.
+    Returns the item guaranteed to be wrap in a list while not affecting raw strings, or double wrapping lists.
     Args:
-        items: the item to be wrapped in a list
+        items: the item to be wrap in a list
 
     Returns:
-        list: the item wrapped appropriately wrapped in a list
+        list: the item wrap appropriately wrap in a list
     """
     if isinstance(items, list):
         return items
@@ -116,6 +119,12 @@ def in_out(input_str, output_str):
     """
     return '\nIn : {} \nOut: {}'.format(input_str, output_str)
 
+def generate_id(num_digits=4):
+    """
+    Generates a num_digits long unique hexadecimal ID, based on a UUID
+    """
+    return uuid.uuid4().hex[-num_digits:]
+
 
 def generate_random_img():
     """
@@ -137,3 +146,4 @@ def toc():
 
 def toc_seconds():
     return time.time() - __start__
+

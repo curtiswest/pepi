@@ -27,6 +27,9 @@ enum Command {
         ENABLE_COMPRESSION  = 202;
         DISABLE_COMPRESSION = 203;
         IDENTIFY_SELF       = 204;
+        DISCONNECT          = 205;
+        PING                = 206;
+        PONG                = 207;
         // Image capture commands
         GET_STILL           = 300;
         START_STREAM        = 400;
@@ -78,6 +81,12 @@ message WrapperMessage {
         IdentityMessage ident = 1;
         DataMessage data = 2;
         ControlMessage control = 3;
+        InprocMessage inproc = 4;
     }
+}
 
+message InprocMessage {
+    string msg_req = 1;
+    string server_id = 2;
+    string serial_msg = 3;
 }

@@ -58,7 +58,7 @@ class ProtobufMessageWrapper(object):
         """
         return self.protobuf().SerializeToString()
 
-    def wrapped(self):
+    def wrap(self):
         # type: () -> WrapperMessage
         """
         Wraps this protobuf message in a WrapperMessage.
@@ -96,8 +96,8 @@ class WrapperMessage(ProtobufMessageWrapper):
         return self.pb
 
     # noinspection PyMissingOrEmptyDocstring
-    def wrapped(self):
-        raise NotImplementedError('A wrapped message cannot itself be wrapped')
+    def wrap(self):
+        raise NotImplementedError('A wrap message cannot itself be wrapped')
 
     def unwrap(self):
         """
@@ -117,14 +117,13 @@ class WrapperMessage(ProtobufMessageWrapper):
             if set_msg == 'int_values':
                 values = pb.int_values.values
             elif set_msg == 'string_values':
-                # values = [str(x) for x in pb.string_values.values]
                 values = pb.string_values.values
             elif set_msg == 'float_values':
                 values = pb.float_values.values
             elif set_msg is None:
                 pass
             else:
-                raise NotImplementedError('Cannot handle values ({}) in wrapped message\'s Oneof'.format(set_msg))
+                raise NotImplementedError('Cannot handle values ({}) in wrap message\'s Oneof'.format(set_msg))
             if values:
                 values = list(values)
             msg = ControlMessage(command=command, values=values)
@@ -134,6 +133,9 @@ class WrapperMessage(ProtobufMessageWrapper):
             data_string = pb.data_string
             data_bytes = pb.data_bytes
             msg = DataMessage(data_code=data_code, data_string=data_string, data_bytes=data_bytes)
+        elif set_msg == 'inproc':
+            pb = self.pb.inproc
+            msg = InprocMessage(pb.msg_req, pb.server_id, pb.serial_msg)
         else:
             raise NotImplementedError('The Protobuf that unwrap() is working on contains an unknown field in the Oneof '
                                       'field. Specifically, unwrap() cannot handle the field ({}).'.format(set_msg))
@@ -165,6 +167,7 @@ class WrapperMessage(ProtobufMessageWrapper):
                             field.extend(values)
                     except ValueError:
                         setattr(destination, descriptor.name, getattr(protobuf, descriptor.name))
+
         pb = ppmsg.WrapperMessage()
         if isinstance(message, IdentityMessage):
             _ingest_message(pb.ident, message)
@@ -172,6 +175,8 @@ class WrapperMessage(ProtobufMessageWrapper):
             _ingest_message(pb.control, message, True)
         elif isinstance(message, DataMessage):
             _ingest_message(pb.data, message)
+        elif isinstance(message, InprocMessage):
+            _ingest_message(pb.inproc, message)
         else:
             raise ProtobufMessageWrapper.MessageTypeError('Cannot handle message of type {}'.format(type(message)))
         return cls(pb)
@@ -245,7 +250,8 @@ class ControlMessage(ProtobufMessageWrapper):
             TypeError: when command is not an int, or values are of mixed type
         """
         values = utils.wrap_to_list(values)
-        if not values or any(not isinstance(v, type(values[0])) for v in values):
+        if values == []: values = None
+        if values and any(not isinstance(v, type(values[0])) for v in values):
             raise TypeError('Values in values list are of mixed type.')
         if not isinstance(command, int):
             raise TypeError('Command must be an int, not {} which is of type {}'.format(command, type(command)))
@@ -314,3 +320,23 @@ class DataMessage(ProtobufMessageWrapper):
         return pb
 
 
+class InprocMessage(ProtobufMessageWrapper):
+    def __init__(self, msg_req, server_id='', serial_msg=''):
+        self.msg_req = msg_req
+        self.server_id = server_id
+        self.serial_msg = serial_msg
+
+    def protobuf(self):
+        pb = ppmsg.InprocMessage()
+        pb.msg_req = self.msg_req
+        pb.server_id = self.server_id
+        pb.serial_msg = self.serial_msg
+        return pb
+
+
+class FileLikeDataWrapper():
+    @staticmethod
+    def serialize_data(data_code, data_bytes):
+        msg = DataMessage(data_code, data_bytes=data_bytes)
+        print msg
+        return msg.wrap().serialize()
