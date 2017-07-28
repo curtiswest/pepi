@@ -37,6 +37,7 @@ enum Command {
         // General Response codes
         COMMAND_SUCCESS     = 700;
         COMMAND_FAILURE     = 800;
+        DATA_UNAVAILABLE    = 801;
     }
 
 // Message type wrappers

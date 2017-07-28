@@ -12,7 +12,7 @@ import utils
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
-__version__ = '0.1'
+__version__ = '0.2'
 __maintainer__ = 'Curtis West'
 __email__ = "curtis@curtiswest.net"
 __status__ = 'Development'
@@ -32,13 +32,45 @@ class CommunicationSocket(object):
         """
         return uuid.uuid4().hex[-num_digits:]
 
-    def _get_identity(self):
+    @property
+    def identity(self):
         return self._socket.identity
 
-    def _set_identity(self, value):
+    @identity.setter
+    def identity(self, value):
         self._socket.identity = value
 
-    identity = property(_get_identity, _set_identity)
+    @property
+    def send_timeout(self):
+        return self._socket.sndtimeo
+
+    @send_timeout.setter
+    def send_timeout(self, value):
+        self._socket.sndtimeo = value
+
+    @property
+    def receive_timeout(self):
+        return self._socket.rcvtimeo
+
+    @receive_timeout.setter
+    def receive_timeout(self, value):
+        self._socket.sndtimeo = value
+
+    @property
+    def router_mandatory(self):
+        return self._socket.router_mandatory
+
+    @router_mandatory.setter
+    def router_mandatory(self, value):
+        self._socket.router_mandatory = value
+
+    @property
+    def linger(self):
+        return self._socket.linger
+
+    @linger.setter
+    def linger(self, value):
+        self._socket.linger = value
 
     class SocketType:
         """
@@ -62,6 +94,12 @@ class CommunicationSocket(object):
 
     # noinspection PyMissingOrEmptyDocstring
     class SocketTypeError(Exception):
+        pass
+
+    class MessageRoutingError(Exception):
+        pass
+
+    class TimeoutError(Exception):
         pass
 
     def __init__(self, socket_type):
@@ -111,13 +149,13 @@ class CommunicationSocket(object):
         """
         return self._socket.disconnect(address)
 
-    def close(self):
+    def close(self, linger=None):
         """
         Closes the socket associated with this CommunicationSocket.
 
         Warnings: the socket cannot be reopened! This function will effectively kill this CommunicationSocket.
         """
-        return self._socket.close()
+        return self._socket.close(linger=linger)
 
     def setsockopt(self, sockopt, value=None):
         """
@@ -174,7 +212,13 @@ class CommunicationSocket(object):
             # Dealers need to insert empty frame to maintain REQ/REP compatibility
             self._socket.send_multipart(msg_parts=['', message])
         else:
-            self._send_raw(message)
+            try:
+                self._send_raw(message)
+            except zmq.ZMQError as e:
+                if e.errno == zmq.EAGAIN:
+                    raise self.TimeoutError('Timeout after {} ms'.format(self._socket.sndtimeo))
+                else:
+                    raise
 
     def send_multipart(self, identity, message):
         """
@@ -194,7 +238,14 @@ class CommunicationSocket(object):
         if self.type not in {CommunicationSocket.SocketType.ROUTER, CommunicationSocket.SocketType.DEALER}:
             raise CommunicationSocket.SocketTypeError('Only sockets of type ROUTER/DEALER can send multipart')
         msg_parts = [identity, '', message]
-        return self._socket.send_multipart(msg_parts=msg_parts)
+        try:
+            return self._socket.send_multipart(msg_parts=msg_parts)
+        except zmq.ZMQError as e:
+            if e.errno == zmq.EAGAIN:
+                raise self.TimeoutError('Send multipart timed out after {} ms'.format(self._socket.sndtimeo))
+            elif e.errno == zmq.EHOSTUNREACH:
+                raise self.MessageRoutingError('No route to given identity ({}). Identity incorrect, or recipient not '
+                                           'connected?'.format(identity))
 
     def receive_multipart(self):
         """
@@ -205,8 +256,17 @@ class CommunicationSocket(object):
         if self.type not in {CommunicationSocket.SocketType.ROUTER, CommunicationSocket.SocketType.DEALER}:
             raise CommunicationSocket.SocketTypeError('Only sockets of type ROUTER/DEALER can receive multipart '
                                                       'messages')
-        identity, _, data = self._receive_multipart_raw()
-        return identity, data
+        try:
+            values = self._receive_multipart_raw()
+            identity, _, data = values
+            return identity, data
+        except ValueError:
+            return None, None
+        except zmq.ZMQError as e:
+            if e.errno == zmq.EAGAIN:
+                raise self.TimeoutError('Receive multipart timed out after {} ms.'.format(self._socket.rcvtimeo))
+            else:
+                raise
 
     def receive(self):
         """
@@ -222,7 +282,15 @@ class CommunicationSocket(object):
             frames = self._receive_multipart_raw()[2]  # Two empty frames when a dealer receives, but only want 3rd
             return frames
         else:
-            return self._receive_raw()
+            try:
+                return self._receive_raw()
+            except zmq.ZMQError as e:
+                if e.errno == zmq.EAGAIN:
+                    raise self.TimeoutError('Receive timed out after {} ms'.format(self._socket.sndtimeo))
+                else:
+                    raise
+
+
 
     def write(self, data):
         # TODO: implement using protobuf for consistency
@@ -334,13 +402,19 @@ class Poller(object):
         Returns:
             list(CommunicationSocket): empty list if no messages received on the registered sockets in the given
             `timeout`, else a list of CommunicationSockets that received messages.
+        Raises:
+            TypeError: when timeout_ms is not None and is not convertible to int
         """
-        if timeout_ms is not None and (not isinstance(timeout_ms, int) or timeout_ms < 0):
-            raise TypeError('Timeout_ms must be a >=0 int, not {} of type {}'.format(timeout_ms, type(timeout_ms)))
+        if timeout_ms is not None:
+            try:
+                timeout_ms = int(timeout_ms)
+            except:
+                raise TypeError('Given timeout_ms is not convertible to int.')
         poll_dict = dict(self._poller.poll(timeout=timeout_ms))
         return_list = []
 
-        for key in poll_dict:
-            if str(key) in self.registered_sockets:
-                return_list.append(self.registered_sockets[str(key)])
+        for key in poll_dict.keys():
+            return_list.append(self.registered_sockets[str(key)])
+            # if str(key) in self.registered_sockets:
+            #     return_list.append(self.registered_sockets[str(key)])
         return return_list
