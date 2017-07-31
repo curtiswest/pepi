@@ -1,62 +1,5 @@
 syntax="proto3";
 
-enum Command {
-        DEFAULT             =  0;
-        // Camera Specific Commands
-        SET_ISO             =   1;
-        GET_ISO             = 101;
-        SET_SHUTTER_SPEED   =   2;
-        GET_SHUTTER_SPEED   = 102;
-        SET_BRIGHTNESS      =   3;
-        GET_BRIGHTNESS      = 103;
-        SET_AWB_GAINS       =   4;
-        GET_AWB_GAINS       = 104;
-        SET_RESOLUTION      =   5;
-        GET_RESOLUTION      = 105;
-        SET_SHARPNESS       =   6;
-        GET_SHARPNESS       = 106;
-        SET_SATURATION      =   7;
-        GET_SATURATION      = 107;
-        SET_ZOOM            =   8;
-        GET_ZOOM            = 108;
-        SET_AWB_MODE        =   9;
-        GET_AWB_MODE        = 109;
-        // Server metadata commands
-        SET_SERVER_ID       = 200;
-        GET_SERVER_ID       = 201;
-        ENABLE_COMPRESSION  = 202;
-        DISABLE_COMPRESSION = 203;
-        IDENTIFY_SELF       = 204;
-        DISCONNECT          = 205;
-        PING                = 206;
-        PONG                = 207;
-        // Image capture commands
-        GET_STILL           = 300;
-        START_STREAM        = 400;
-        STOP_STREAM         = 401;
-        // General Response codes
-        COMMAND_SUCCESS     = 700;
-        COMMAND_FAILURE     = 800;
-        DATA_UNAVAILABLE    = 801;
-    }
-
-// Message type wrappers
-
-message IntValues {
-    repeated int32 values = 1;
-}
-
-message FloatValues {
-    repeated float values = 1;
-}
-
-message StringValues {
-    repeated string values = 1;
-
-}
-
-// Used messages
-
 message IdentityMessage {
     string ip = 1;
     string identifier = 4;
@@ -69,12 +12,8 @@ message DataMessage {
 }
 
 message ControlMessage {
-    Command command = 1;
-    oneof values {
-        IntValues int_values = 2;
-        StringValues string_values = 3;
-        FloatValues float_values = 4;
-    }
+    bool setting = 1; // True if this a 'set' command, false if 'get' command
+    map<string, float> payload = 2;
 }
 
 message WrapperMessage {

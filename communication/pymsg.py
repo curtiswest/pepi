@@ -5,7 +5,6 @@ along with concrete implementations for the messages used for the Pepi system.
 from abc import ABCMeta, abstractmethod
 import google.protobuf.message
 import pepimessage_pb2 as ppmsg
-import utils
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
@@ -111,22 +110,9 @@ class WrapperMessage(ProtobufMessageWrapper):
             msg = IdentityMessage(self.pb.ident.ip, self.pb.ident.identifier)
         elif set_msg == 'control':
             pb = self.pb.control
-            command = pb.command
-            values = None
-            set_msg = pb.WhichOneof('values')
-            if set_msg == 'int_values':
-                values = pb.int_values.values
-            elif set_msg == 'string_values':
-                values = pb.string_values.values
-            elif set_msg == 'float_values':
-                values = pb.float_values.values
-            elif set_msg is None:
-                pass
-            else:
-                raise NotImplementedError('Cannot handle values ({}) in wrap message\'s Oneof'.format(set_msg))
-            if values:
-                values = list(values)
-            msg = ControlMessage(command=command, values=values)
+            setting = pb.setting
+            payload = dict(pb.payload)
+            msg = ControlMessage(setting=setting, payload=payload)
         elif set_msg == 'data':
             pb = self.pb.data
             data_code = pb.data_code
@@ -154,12 +140,10 @@ class WrapperMessage(ProtobufMessageWrapper):
         Raises:
             MessageTypeError: when given a `message` that cannot be handled or is of the wrong type
         """
-        def _ingest_message(destination, source, has_nested_types=False):
+        def _ingest_message(destination, source, has_nested_types=False, has_dict_type=False):
             protobuf = source.protobuf()
             for descriptor in protobuf.DESCRIPTOR.fields:
-                if not has_nested_types:
-                    setattr(destination, descriptor.name, getattr(protobuf, descriptor.name))
-                else:
+                if has_nested_types:
                     try:
                         if protobuf.HasField(descriptor.name):
                             values = getattr(getattr(protobuf, descriptor.name), 'values')
@@ -167,12 +151,22 @@ class WrapperMessage(ProtobufMessageWrapper):
                             field.extend(values)
                     except ValueError:
                         setattr(destination, descriptor.name, getattr(protobuf, descriptor.name))
+                elif has_dict_type:
+                    try:
+                        setattr(destination, descriptor.name, getattr(protobuf, descriptor.name))
+                    except AttributeError:
+                        # Might be a dictionary type
+                        pb_dict = getattr(protobuf, descriptor.name)
+                        for key, value in pb_dict.iteritems():
+                            getattr(destination, descriptor.name)[key] = value
+                else:
+                    setattr(destination, descriptor.name, getattr(protobuf, descriptor.name))
 
         pb = ppmsg.WrapperMessage()
         if isinstance(message, IdentityMessage):
             _ingest_message(pb.ident, message)
         elif isinstance(message, ControlMessage):
-            _ingest_message(pb.control, message, True)
+            _ingest_message(pb.control, message, has_dict_type=True)
         elif isinstance(message, DataMessage):
             _ingest_message(pb.data, message)
         elif isinstance(message, InprocMessage):
@@ -239,24 +233,38 @@ class ControlMessage(ProtobufMessageWrapper):
     Encapsulates an ControlMessage .proto message.
     """
 
-    # noinspection PyMissingConstructor
-    def __init__(self, command, values=None):
+    @property
+    def payload(self):
+        return self._payload
+
+    @payload.setter
+    def payload(self, value):
+        if value is not None:
+            if not isinstance(value, dict):
+                raise TypeError('Payload must be a dictionary or None')
+            if any(not isinstance(x, (str, unicode)) for x in value.keys()):
+                raise TypeError('All payload keys must be Strings')
+            if any(not isinstance(x, (int, float)) and x is not None for x in value.values()):
+                raise TypeError('All values must be int, floats or None')
+            cleaned_dict = dict()
+            for key, value in value.iteritems():
+                cleaned_dict[key.strip().lower()] = value
+            self._payload = cleaned_dict
+        else:
+            self._payload = None
+
+    def __init__(self, setting, payload):
         """
         Initialises a control message with the given command and values list.
         Args:
-            command (int): a ppmsg enum value
-            values (list): a list of purely int, strings or floats.
+            setting (bool): whether this is a set (True) or get (False) command
+            payload (dict<string, float>): key-value pairs of the values to get or set. If setting, the values for all
+                keys are ignored.
         Raises:
             TypeError: when command is not an int, or values are of mixed type
         """
-        values = utils.wrap_to_list(values)
-        if values == []: values = None
-        if values and any(not isinstance(v, type(values[0])) for v in values):
-            raise TypeError('Values in values list are of mixed type.')
-        if not isinstance(command, int):
-            raise TypeError('Command must be an int, not {} which is of type {}'.format(command, type(command)))
-        self.command = command
-        self.values = values
+        self.setting = setting
+        self.payload = payload
 
     def protobuf(self):
         """
@@ -265,19 +273,15 @@ class ControlMessage(ProtobufMessageWrapper):
             ppmsg.ControlMessage: a protobuf of this message
         """
         pb = ppmsg.ControlMessage()
-        pb.command = self.command
-        values = utils.wrap_to_list(self.values)
-        if values is None or values == [] or values[0] is None:
-            pass
-        elif isinstance(values[0], int):
-            pb.int_values.values.extend(values)
-        elif isinstance(values[0], float):
-            pb.float_values.values.extend(values)
-        elif isinstance(values[0], (str, unicode)):
-            pb.string_values.values.extend(values)
+        pb.setting = self.setting
+
+        if not self.setting and self.payload is not None:
+            payload = dict.fromkeys(self.payload, 0)  # If getting, only payload keys are kept, values are ignored
         else:
-            raise TypeError('ControlMessage protobuf can only store values that are a list of purely strings'
-                            ', ints or floats.')
+            payload = self.payload
+
+        for key, value in payload.iteritems():
+            pb.payload[key] = value
         return pb
 
 
@@ -287,13 +291,14 @@ class DataMessage(ProtobufMessageWrapper):
     """
 
     # noinspection PyMissingConstructor
-    def __init__(self, data_code, data_string='', data_bytes=''):
+    def __init__(self, data_code, data_string='', data_bytes='', info=None):
         """
         Initialises a DataMessage with the given parameters.
         Args:
             data_code (str): the code/ID associated with the message
             data_string (str): a string holding some data
             data_bytes (str or bytearray): a bytes string holding some data
+            info (dict): key-value pairs of request or reply info
         """
         if not isinstance(data_code, (str, unicode)):
             raise TypeError('Data_code must be a string. Got instead: {}'.format(type(data_code)))
@@ -306,6 +311,7 @@ class DataMessage(ProtobufMessageWrapper):
         self.data_code = str(data_code)
         self.data_string = str(data_string)
         self.data_bytes = str(data_bytes)
+        self.info = info
 
     def protobuf(self):
         """
@@ -317,6 +323,10 @@ class DataMessage(ProtobufMessageWrapper):
         pb.data_code = self.data_code
         pb.data_string = self.data_string
         pb.data_bytes = self.data_bytes
+
+        # TODO implement info map
+        # for key, value in self.info.iteritems():
+        #     pb.info[key] = value
         return pb
 
 
@@ -334,9 +344,8 @@ class InprocMessage(ProtobufMessageWrapper):
         return pb
 
 
-class FileLikeDataWrapper():
+class FileLikeDataWrapper:
     @staticmethod
     def serialize_data(data_code, data_bytes):
         msg = DataMessage(data_code, data_bytes=data_bytes)
-        print msg
         return msg.wrap().serialize()

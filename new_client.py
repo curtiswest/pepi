@@ -3,7 +3,7 @@
 New_client.py: Provides the class used to run the client-side software for Pepi. Currently only works in the terminal,
 but will probably be refactored into a separate process for implementation of a GUI at a later date.
 """
-from datetime import datetime
+import datetime
 import os
 import subprocess
 import logging
@@ -18,6 +18,7 @@ from communication.communication import CommunicationSocket, Poller
 from communication.pymsg import *
 import pepi_config as pc
 from stoppablethread import StoppableThread
+import utils
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
@@ -80,9 +81,47 @@ class TerminalThread(StoppableThread):
             else:
                 msg = InprocMessage(inp.strip())
                 self.comm_inproc.send(msg.wrap().serialize())
+            time.sleep(0.1)
 
 
 class CommunicationThread(StoppableThread):
+    class DataItem(object):
+        def __init__(self, code, expiry=None):
+            self.code = code
+            self.expiry = expiry
+            if expiry:
+                self.expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=expiry)
+
+        def update_expiry(self, seconds):
+            self.expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+
+        def is_expired(self):
+            return datetime.datetime.now() > self.expiry_time
+
+        def seconds_to_expiry(self):
+            return (self.expiry_time - datetime.datetime.now()).total_seconds()
+
+        def __str__(self):
+
+            if self.expiry_time:
+                return '"{}" exp\'s in {}s'.format(self.code, round(self.seconds_to_expiry()))
+            else:
+                return self.code
+
+        def __repr__(self):
+            return self.__str__()
+
+        def __hash__(self):
+            return hash(self.code)
+
+        def __eq__(self, rhs):
+            if isinstance(rhs, self.__class__):
+                return rhs.code == self.code
+            elif isinstance(rhs, (str, unicode)):
+                return rhs == self.code
+            else:
+                return False
+
     HB_INTERVAL = 10  # Seconds between heartbeats to client
     HB_HEALTH = 3  # Number of heartbeats missed before assumed dead
 
@@ -123,7 +162,8 @@ class CommunicationThread(StoppableThread):
 
     @staticmethod
     def get_image_dir():
-        image_dir = "images/" + datetime.strftime(datetime.now(), '%Y%m%d%H%M%S')  # Directory for writing images
+        now = datetime.datetime.now()
+        image_dir = "images/" + datetime.datetime.strftime(now, '%Y%m%d%H%M%S')  # Directory for writing images
         if not os.path.exists(image_dir):
             os.makedirs(image_dir)
         return image_dir
@@ -157,45 +197,47 @@ class CommunicationThread(StoppableThread):
         if not server:
             logging.info('Control message from unknown server. No response..')
         else:
-            if message.command == ppmsg.PING:
-                 socket.send_multipart(identity, ControlMessage(ppmsg.PONG).wrap().serialize())
-            elif message.command == ppmsg.PONG:
-                pass
-            elif message.command == ppmsg.GET_STILL or message.command == ppmsg.START_STREAM:
-                if not server_id:
-                    pass # TODO handle this case
+            for key, value in message.payload.iteritems():
+                logging.debug('Recv ControlMessage: Key: {} | Value: {}'.format(key, value))
+
+                if key == 'ping':
+                    # Reply to ping
+                    msg = ControlMessage(setting=False, payload={'pong': None}).wrap().serialize()
+                    self.socket.send_multipart(server.socket_id, msg)
+                elif key == 'pong':
+                    pass
+                elif key == 'still':
+                    if not server_id:
+                        logging.error('Got a data code but not sure which server_id it was from.')
+                    else:
+                        try:
+                            expiry = message.payload['expiry']
+                        except KeyError:
+                            expiry = None
+
+                        logging.info('Got data_code {} from {}'.format(int(value), server_id))
+                        self.queued_data[server_id].append(self.DataItem(str(int(value)), expiry=expiry))
+                elif key == 'data_unavailable':
+                    logging.warn('Requested data item {} is unavailable.'.format(int(value)))
+                    self.queued_data[server_id].remove(int(value))
                 else:
-                    self.queued_data[server_id].append(message.values[0])
-            elif message.command == ppmsg.DATA_UNAVAILABLE:
-                data_code = message.values[0]
-                logging.warn('Requested data item {} is unavailable.'.format(data_code))
-                self.queued_data[server_id].remove(data_code)
+                    if message.setting:
+                        print '{} was set to {}'.format(key, value)
 
     def data_message_handler(self, socket, identity, message, server=None, server_id=None):
         assert server is None or isinstance(server, KnownServer)
         logging.debug('Handling data message')
-        if not server:
-            logging.info('Data message from unknown server. No response..')
+        if not server or not server_id:
+            logging.info('Data message from unknown server/server_id. No response..')
         else:
             if message.data_bytes:
-                for server_id, data_codes in self.queued_data.iteritems():
-                    if message.data_code in data_codes:
-                        if message.data_code == 'stream':
-                            # raise NotImplementedError('Cannot stream yet')
-                            # print len(message.data_bytes)
-                            # global player
-                            self.player.stdin.write(message.data_bytes)
-                            # self.frames += 1
-                            break
-                        else:
-                            # Save the image under the server_id / data code
-                            image = utils.decode_image(message.data_bytes)
-                            fname = self.image_dir + '/' + server_id + '_' + message.data_code
-                            cv2.imwrite('{}.png'.format(fname), image)
-                            # Remove the data from the internal data queue
-                            data_codes.remove(message.data_code)
-                            self.queued_data[server_id] = data_codes
-                            break
+                if server_id in self.queued_data.keys():
+                    # TODO move streaming to the new socket
+                    image = utils.decode_image(message.data_bytes)
+                    fname = self.image_dir + '/' + server_id + '_' + message.data_code
+                    cv2.imwrite('{}.png'.format(fname), image)
+                    # Remove the data from the internal data queue
+                    self.queued_data[server_id].remove(message.data_code)
                 else:
                     logging.error('Data from unknown data source/server!')
             if message.data_string:
@@ -205,55 +247,72 @@ class CommunicationThread(StoppableThread):
         assert isinstance(message, InprocMessage), 'Inproc handler get a non-InprocMessage message'
         logging.debug('Handling inproc message')
 
-        if message.msg_req == 'list servers':
-            print 'Known servers\'s IDs: {}'.format(self.known_servers.keys())
-        elif message.msg_req == 'capture':
-            req_msg = ControlMessage(ppmsg.GET_STILL).wrap().serialize()
-            for s in self.known_servers.values():
-                if s.is_complete():
-                    self.socket.send_multipart(s.socket_id, req_msg)
-            print 'Capture messages sent'
-        elif message.msg_req == 'list data':
-            print 'Queued data: {}'.format(self.queued_data)
-        elif message.msg_req == 'download':
-            self.image_dir = self.get_image_dir()
-            for server_id, data_codes in self.queued_data.iteritems():
-                print('Server id: {}. Data codes: {}'.format(server_id, data_codes))
-                server = self.known_servers[server_id]
-                if isinstance(data_codes, list):
-                    pass
-                else:
-                    data_codes = [data_codes]
-                data_codes = list(data_codes)  # TODO fix wrapping
+        parts = message.msg_req.split()
+        if parts:
+            if 'exit' in parts:
+                self.socket.close()
+                self.stop()
 
-                for data_code in data_codes:
-                    req_msg = DataMessage(data_code).wrap().serialize()
-                    self.socket.send_multipart(server.socket_id, req_msg)
-            print 'Download request messages sent'
-        elif message.msg_req.startswith('start stream'):
-            # TODO: implement server selection
-            cmdline = ['/Applications/VLC.app/Contents/MacOS/VLC', '--demux', 'h264', '-']
-            self.player = subprocess.Popen(cmdline, stdin=subprocess.PIPE)
-            # self.start_time = time.time()
-            # self.frames = 0
-            req_msg = ControlMessage(ppmsg.START_STREAM).wrap().serialize()
-            test_server = self.known_servers.values()[0]
-            self.socket.send_multipart(test_server.socket_id, req_msg)
-        elif message.msg_req == 'stop stream':
-            self.player.terminate()
-            # delta = time.time() - self.start_time
-            req_msg = ControlMessage(ppmsg.STOP_STREAM).wrap().serialize()
-            test_server = self.known_servers.values()[0]
-            self.socket.send_multipart(test_server.socket_id, req_msg)
-            # logging.info('Got {} frames in {}s. Frame rate: {} fps'.format(self.frames, delta, (self.frames / delta)))
-        elif message.msg_req == 'exit':
-            self.socket.close()
-            self.stop()
-        elif not message.msg_req:
-            # Empty message
-            pass
+            # Data Message Parts
+            if 'download' in parts:
+                self.image_dir = self.get_image_dir()
+
+                dict_copy = self.queued_data
+                for server_id, data_items in dict_copy.iteritems():
+                    logging.debug('Server id: {}. Data codes: {}'.format(server_id, data_items))
+                    server = self.known_servers[server_id]
+
+                    for data_item in data_items:
+                        if not data_item.is_expired():
+                            req_msg = DataMessage(data_item.code).wrap().serialize()
+                            self.socket.send_multipart(server.socket_id, req_msg)
+                        else:
+                            logging.warn('Tried to download data_code {}, but is expired'.format(data_item.code))
+                            self.queued_data[server_id].remove(data_item)
+
+            if parts[0] == 'get':
+                req_msg = ControlMessage(setting=False, payload={})
+                # Meta message parts
+                if 'servers' in parts:
+                    print 'Known servers\'s IDs: {}'.format(self.known_servers.keys())
+                if 'data_codes' in parts:
+                    print 'Queued data: {}'.format(self.queued_data)
+
+                # Control message parts
+                if 'still' in parts:
+                    req_msg.payload['still'] = None
+                if 'iso' in parts:
+                    req_msg.payload['iso'] = None
+                if 'shutter_speed' in parts:
+                    req_msg.payload['shutter_speed'] = None
+                if 'brightness' in parts:
+                    req_msg.payload['brightness'] = None
+
+                for s in self.known_servers.values():
+                    if s.is_complete() and s.is_alive():
+                        self.socket.send_multipart(s.socket_id, req_msg.wrap().serialize())
+            elif parts[0] == 'set':
+                pass
         else:
-            logging.warn('Unknown command! Given command: {}'.format(message.msg_req))
+            pass  # Empty message
+
+        # elif message.msg_req.startswith('start stream'):
+        #     # TODO: implement server selection
+        #     cmdline = ['/Applications/VLC.app/Contents/MacOS/VLC', '--demux', 'h264', '-']
+        #     self.player = subprocess.Popen(cmdline, stdin=subprocess.PIPE)
+        #     # self.start_time = time.time()
+        #     # self.frames = 0
+        #     req_msg = ControlMessage(ppmsg.START_STREAM).wrap().serialize()
+        #     test_server = self.known_servers.values()[0]
+        #     self.socket.send_multipart(test_server.socket_id, req_msg)
+        # elif message.msg_req == 'stop stream':
+        #     self.player.terminate()
+        #     # delta = time.time() - self.start_time
+        #     req_msg = ControlMessage(ppmsg.STOP_STREAM).wrap().serialize()
+        #     test_server = self.known_servers.values()[0]
+        #     self.socket.send_multipart(test_server.socket_id, req_msg)
+        #     # logging.info('Got {} frames in {}s. Frame rate: {} fps'.format(self.frames, delta,
+        #     #                                                               (self.frames / delta)))
 
     def server_message_router(self, socket, identity, message):
         """
@@ -323,7 +382,9 @@ class CommunicationThread(StoppableThread):
                         logging.debug('Need a heartbeat from server at {} soon. Health: {}'.format(server.ip,
                                                                                                    server.health))
                         try:
-                            self.socket.send_multipart(server.socket_id, ControlMessage(ppmsg.PING).wrap().serialize())
+                            self.socket.send_multipart(server.socket_id,
+                                                       ControlMessage(setting=False,
+                                                                      payload={'ping': None}).wrap().serialize())
                         except CommunicationSocket.MessageRoutingError:
                             # Couldn't send message to server, so it is already dead
                             dead_server_ids.append(server_id)

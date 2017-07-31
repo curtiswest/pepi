@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import time
+import threading
 import logging
 import sys
 import signal
@@ -13,6 +14,7 @@ import pepi_config
 from communication.communication import CommunicationSocket, Poller
 from communication.pymsg import *
 import communication.pepimessage_pb2 as ppmsg
+import utils
 
 __author__ = 'Curtis West, Claudio Pizzolato'
 __copyright__ = 'Copyright 2017, Curtis West, Claudio Pizzolato'
@@ -55,6 +57,7 @@ class Server:
     HB_MAX_INTERVAL = 15  # Seconds between heartbeats to client
     HB_HEALTH = 3  # Number of heartbeats missed before assumed dead
     HB_BACKOFF_RATE = 1.75
+    DATA_EXPIRY_SECONDS = 60 * 10 # How long a capture data item is guaranteed to be available on this server
 
     def exit_handler(self):
         logging.info("Exit Handler: cleaning up..")
@@ -104,6 +107,11 @@ class Server:
             f.close()
             return serial
 
+    def delete_data_item(self, with_data_code):
+        assert isinstance(with_data_code, str)
+        logging.debug('Deleting data code {} from timer'.format(with_data_code))
+        self.queued_data.pop(with_data_code, None)
+
     def socket_setup(self):
         if self.socket:
             # Socket exists, need to destroy
@@ -122,7 +130,7 @@ class Server:
         self.connected_client_id = None
 
     def __init__(self):
-        logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s %(levelname)-8s: %(message)s',
+        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(asctime)s %(levelname)-8s: %(message)s',
                             datefmt='%d/%m/%Y %I:%M:%S %p')
         atexit.register(self.exit_handler)
 
@@ -135,6 +143,9 @@ class Server:
         self.stream_thread = None
         self.connected_client_id = ''
         self.queued_data = dict()
+        self.next_data_code = 0
+        self.compressed_transfer = True
+        self.compression_level = 90
 
         # Pre-generate our ident_msg for performance
         self.ip = check_output(['hostname', '-I']).rstrip()  # TODO: convert to property
@@ -168,7 +179,7 @@ class Server:
                 else:
                     if self.connected_client_id:
                         logging.debug('Pinging {}. Liveness: {}'.format(self.connected_client_id, client_health))
-                        self.socket.send(ControlMessage(ppmsg.PING, values=[self.server_id]).wrap().serialize())
+                        self.socket.send(ControlMessage(setting=False, payload={'ping': None}).wrap().serialize())
                     else:
                         logging.debug('No client. Sending out IdentMessage')
                         self.socket.send(self.ident_msg_serial)
@@ -199,38 +210,87 @@ class Server:
             logging.debug('Got ident from same old client {}'.format(message.identifier))
 
     def control_message_handler(self, socket, message):
-        logging.debug('Received a ControlMessage. Command No: {}'.format(message.command))
-        if message.command == ppmsg.GET_STILL:
-            data_code = utils.generate_id(8)
-            control_reply = ControlMessage(ppmsg.GET_STILL, values=[data_code])
-            self.socket.send(control_reply.wrap().serialize())
+        setting = message.setting  # Shorthand access to setting
+        reply = ControlMessage(setting=True, payload={})  # Reply message that is built upon and sent at end
+
+        if 'still' in message.payload.keys():
+            # Get stills first, as time sensitive
+            reply.payload['still'] = self.next_data_code
+            reply.payload['expiry'] = self.DATA_EXPIRY_SECONDS  # TODO implement data expiry
             img = self.get_camera_still()
-            self.queued_data[data_code] = utils.encode_image(img)
+            self.queued_data[str(self.next_data_code)] = utils.encode_image(img, self.compressed_transfer,
+                                                                            self.compression_level)
+
             logging.debug('Queued data now: {}'.format(self.queued_data.keys()))
-        elif message.command == ppmsg.START_STREAM:
-            # TODO move streaming to a new socket and thread - sockets aren't threadsafe
-            raise NotImplementedError('Streaming not implemented')
-            # data_code = 'stream'
-            # control_reply = ControlMessage(ppmsg.START_STREAM, values=[data_code])
-            # self.socket.send(control_reply.wrap().serialize())
-            # self.is_streaming = True
-            # self.stream_thread = StreamingThread(self.camera, self.socket, self.ident_msg)
-            # self.stream_thread.daemon = True
-            # self.stream_thread.start()
-        elif message.command == ppmsg.STOP_STREAM:
-            self.is_streaming = False
-            self.stream_thread.stop()
-            logging.debug('Stopping stream due to control message')
-        elif message.command == ppmsg.DISCONNECT:
-            logging.info('Got disconnected from client. Reconnecting in 5 seconds..')
-            time.sleep(5)
-            self.socket_setup()
-        elif message.command == ppmsg.PING:
-            socket.send(ControlMessage(ppmsg.PONG).wrap().serialize())
-        elif message.command == ppmsg.PONG:
-            pass
-        else:
-            logging.error('Received unknown control message! Command No: {}'.format(message.command))
+            data_timer = threading.Timer(self.DATA_EXPIRY_SECONDS, self.delete_data_item, [str(self.next_data_code)])
+            data_timer.start()
+            self.next_data_code += 1
+        for key, value in message.payload.iteritems():
+            # Handle remaining payload
+            logging.debug('Control Msg Payload: Key: {} | Value: {}'.format(key, value))
+
+            if key == 'still':
+                pass  # Already handled above
+            elif key == 'ping':
+                reply.payload['pong'] = None
+            elif key == 'pong':
+                pass
+            elif key == 'iso':
+                if setting:
+                    self.camera.iso = value
+                reply.payload[key] = self.camera.iso
+            elif key == 'shutter_speed':
+                if setting:
+                    self.camera.shutter_speed = value
+                reply.payload[key] = self.camera.shutter_speed
+            elif key == 'brightness':
+                if setting:
+                    self.camera.brightness = value
+                reply.payload[key] = self.camera.brightness
+            elif key == 'sharpness':
+                if setting:
+                    self.camera.sharpness = value
+                reply.payload[key] = self.camera.sharpness
+            elif key == 'start_stream':
+                # TODO implement streaming with a new socket and thread - sockets aren't threadsafe
+                # self.socket.send(control_reply.wrap().serialize())
+                # self.is_streaming = True
+                # self.stream_thread = StreamingThread(self.camera, self.socket, self.ident_msg)
+                # self.stream_thread.daemon = True
+                # self.stream_thread.start()
+                pass
+            elif key == 'stop_stream':
+                # self.is_streaming = False
+                # self.stream_thread.stop()
+                pass
+            elif key == 'awb_red':
+                pass
+            elif key == 'awb_blue':
+                pass
+            elif key == 'resolution_x':
+                if setting:
+                    self.camera.resolution = value, self.camera.resolution[1]
+                reply.payload[key] = self.camera.resolution[0]
+            elif key == 'resolution_y':
+                if setting:
+                    self.camera.resolution = self.camera.resolution[0], value
+                reply.payload[key] = self.camera.resolution[1]
+            elif key == 'compression':
+                if bool(value):
+                    self.compressed_transfer = True
+                    self.compression_level = 90
+                else:
+                    self.compressed_transfer = False
+                    self.compression_level = 3
+            elif key == 'disconnect':
+                logging.info('Got disconnected from client. Reconnecting in 5 seconds..')
+                time.sleep(5)
+                self.socket_setup()
+            else:
+                logging.warn('Unknown key: {}'.format(key))
+
+        if reply.payload:
+            socket.send(reply.wrap().serialize())
 
     def data_message_handler(self, message):
         logging.info('Got a request for queued data item: {}'.format(message.data_code))
@@ -241,7 +301,7 @@ class Server:
             self.socket.send(reply.wrap().serialize())
         else:
             logging.warn('Unknown data code ({}) requested!'.format(message.data_code))
-            reply = ControlMessage(ppmsg.DATA_UNAVAILABLE, values=[message.data_code])
+            reply = ControlMessage(True, {'data_unavailable': message.data_code})
             self.socket.send(reply.wrap().serialize())
         logging.debug('Remaining queued data items: {}'.format(self.queued_data.keys()))
 
@@ -259,118 +319,6 @@ class Server:
             self.data_message_handler(message)
         else:
             raise TypeError('Cannot handle message of type {}'.format(type(message)))
-
-        # def handle_command(self, identity, command, values=None):
-        #     logging.debug('Handling command: {}'.format(command))
-        #     # Handle different command cases
-        #     ## Camera specific
-        #     if command == ppmsg.SET_ISO:
-        #         try:
-        #             # self.camera_instance.iso = values[0]
-        #             self.control_socket.send(command, values[0])
-        #             # self.command_socket.send_old(command=command, int_values=self.camera_instance.iso)
-        #         except Exception as e:
-        #             self.control_socket.raise_remote_exception(e)
-        # elif command == ppmsg.GET_ISO:
-        #     # self.command_socket.send_old(command=command, int_values=self.camera_instance.iso)
-        # elif command == ppmsg.SET_SHUTTER_SPEED:
-        #     try:
-        #         self.camera_instance.shutter_speed = values[0]
-        #         self.command_socket.send_old(command=command, int_values=self.camera_instance.shutter_speed)
-        #     except Exception as e:
-        #         self.command_socket.raise_remote_exception(e)
-        # elif command == ppmsg.GET_SHUTTER_SPEED:
-        #     self.command_socket.send_old(command=command, int_values=self.camera_instance.shutter_speed)
-        # elif command == ppmsg.SET_BRIGHTNESS:
-        #     try:
-        #         self.camera_instance.brightness = values[0]
-        #         self.command_socket.send_old(command=command, int_values=self.camera_instance.brightness)
-        #     except Exception as e:
-        #         self.command_socket.raise_remote_exception(e)
-        # elif command == ppmsg.GET_BRIGHTNESS:
-        #     self.command_socket.send_old(command=command, int_values=self.camera_instance.brightness)
-        # elif command == ppmsg.SET_AWB_GAINS:
-        #     try:
-        #         self.camera_instance.awb_gains = values[0:2]
-        #         self.command_socket.send_old(command=command,
-        #                                      float_values=[float(val) for val in self.camera_instance.awb_gains])
-        #     except Exception as e:
-        #         self.command_socket.raise_remote_exception(e)
-        #     pass
-        # elif command == ppmsg.GET_AWB_GAINS:
-        #     self.command_socket.send_old(command=command, float_values=[float(val)
-        #                                  for val in self.camera_instance.awb_gains])
-        # elif command == ppmsg.SET_RESOLUTION:
-        #     try:
-        #         self.camera_instance.resolution = [values[0], values[1]]
-        #         self.command_socket.send_old(command=command, int_values=list(self.camera_instance.resolution))
-        #     except Exception as e:
-        #         self.command_socket.raise_remote_exception(e)
-        # elif command == ppmsg.GET_RESOLUTION:
-        #     self.command_socket.send_old(command=command, int_values=list(self.camera_instance.resolution))
-        # elif command == ppmsg.SET_SATURATION:
-        #     try:
-        #         self.camera_instance.saturation = values[0]
-        #         self.command_socket.send_old(command=command, int_values=self.camera_instance.saturation)
-        #     except Exception as e:
-        #         self.command_socket.raise_remote_exception(e)
-        # elif command == ppmsg.GET_SATURATION:
-        #     self.command_socket.send_old(command=command, int_values=self.camera_instance.saturation)
-        # elif command == ppmsg.SET_ZOOM:
-        #     try:
-        #         self.camera_instance.zoom = values[0:3]
-        #         self.command_socket.send_old(command=command, int_values=list(self.camera_instance.zoom))
-        #     except Exception as e:
-        #         self.command_socket.raise_remote_exception(e)
-        # elif command == ppmsg.GET_ZOOM:
-        #     self.command_socket.send_old(command=command, float_values=self.camera_instance.zoom)
-        #     pass
-        # elif command == ppmsg.SET_AWB_MODE:
-        #     try:
-        #         self.camera_instance.awb_mode = values[0]
-        #         self.command_socket.send_old(command=command, string_values=self.camera_instance.awb_mode)
-        #     except Exception as e:
-        #         self.command_socket.raise_remote_exception(e)
-        # elif command == ppmsg.GET_AWB_MODE:
-        #     self.command_socket.send_old(command=command, string_values=self.camera_instance.awb_mode)
-        # ## Server specific commands
-        # elif command == ppmsg.SET_SERVER_ID:
-        #     try:
-        #         self.server_id = values[0].zfill(16)
-        #         self.command_socket.send_old(command=command, string_values=self.server_id)
-        #     except Exception as e:
-        #         self.command_socket.raise_remote_exception(e)
-        # elif command == ppmsg.GET_SERVER_ID:
-        #     self.command_socket.send_old(command=command, string_values=self.server_id)
-        # elif command == ppmsg.ENABLE_COMPRESSION:
-        #     self.compressed_transfer = True
-        #     self.compression_level = 90
-        #     self.command_socket.send_old(command=command)
-        # elif command == ppmsg.DISABLE_COMPRESSION:
-        #     self.compressed_transfer = False
-        #     self.compression_level = 3
-        #     self.command_socket.send_old(command=command)
-        # ## Image capture commands
-        # elif command == ppmsg.GET_STILL:
-        #     image = self.get_camera_still()
-        #     image = utils.encode_image(image, self.compressed_transfer, self.compression_level)
-        #     # self.command_socket.send_old(ppmsg.GET_STILL, image_data=image, server_id=self.server_id)
-        #     self.control_socket.send(command) # ACK
-        #     print('Sending..')
-        #     self.control_socket.send_image(identity, image, self.server_id)
-        #     print('Sent.')
-        # elif command == ppmsg.START_STREAM:
-        #     self.command_socket.send_old(ppmsg.START_STREAM)
-        #     self.start_image_stream()
-        # elif command == ppmsg.STOP_STREAM:
-        #     if self.stream_thread is not None:
-        #         self.stream_thread.stop()
-        #     self.command_socket.send_old(ppmsg.STOP_STREAM)
-        # else:
-        #     # Received a command that the server doesn't know how to handle, reply with error response
-        #     logging.warn('Received an command code ({}) that is unknown how to handle'.format(command))
-        #     self.control_socket.send_old(command=ppmsg.COMMAND_FAILURE)
-
 
 if __name__ == '__main__':
     s = Server()

@@ -2,12 +2,11 @@
 Utils.py: provides some utility methods that are commonly called.
 """
 import time
-import google.protobuf
-from cv2 import imdecode, imencode, IMWRITE_PNG_COMPRESSION, IMWRITE_JPEG_QUALITY
-import numpy as np
 import uuid
-import random
-import string
+from cv2 import imdecode, imencode, IMWRITE_PNG_COMPRESSION, IMWRITE_JPEG_QUALITY
+
+import google.protobuf
+import numpy as np
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
@@ -119,6 +118,7 @@ def in_out(input_str, output_str):
     """
     return '\nIn : {} \nOut: {}'.format(input_str, output_str)
 
+
 def generate_id(num_digits=4):
     """
     Generates a num_digits long unique hexadecimal ID, based on a UUID
@@ -147,3 +147,17 @@ def toc():
 def toc_seconds():
     return time.time() - __start__
 
+
+def iterify(iterable):
+    """
+    Converts a string or list of strings into an iterable object without iterating over the letters in the strings.
+
+    Author: @kindall on StackOverflow (https://stackoverflow.com/a/6710895/8144376)
+    """
+    if isinstance(iterable, basestring):
+        iterable = [iterable]
+    try:
+        iter(iterable)
+    except TypeError:
+        iterable = [iterable]
+    return iterable

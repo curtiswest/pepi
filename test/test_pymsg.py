@@ -1,9 +1,26 @@
-import unittest
 import time
-from communication import pymsg
+import unittest
+
 import communication.pepimessage_pb2 as ppmsg
-import numpy as np
 import utils
+from communication import pymsg
+
+
+def isclose(a, b, rel_tol=1e-09, abs_tol=0.001):
+    return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
+
+
+def timer_test_helper(runs, message):
+    assert isinstance(message, pymsg.ProtobufMessageWrapper)
+    start = time.time()
+    for _ in range(0, runs):
+        wrapped_msg = pymsg.WrapperMessage.wrap(message)
+        serial = wrapped_msg.serialize()
+        from_serial = pymsg.WrapperMessage.from_serialized_string(serial)
+        _ = from_serial.unwrap()
+    delta = time.time() - start
+    print '{} {} messages took {} sec. Rate: {} sec per msg'.format(runs, type(message), delta, (delta / runs))
+    return delta, (delta/runs)
 
 
 class TestPyMsg(unittest.TestCase):
@@ -37,58 +54,43 @@ class TestPyMsg(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.ident_message_helper(ip=ip_in, identifier=100)
 
-    def control_message_test_helper(self, command=None, values=None):
-        # Recall that we always get back a list of values for control messages, so need to handle that for empty cases
-        is_input_a_none = not isinstance(values, str) and (values is None or values == [] or values[0] is None)
-        is_input_empty_string = (values == '')
-
-        control = pymsg.ControlMessage(command, values)
-        self.assertIsInstance(control.protobuf(), ppmsg.ControlMessage)
-        wrapped_string = control.wrap().serialize()
+    def control_message_test_helper(self, setting=None, payload=None):
+        msg = pymsg.ControlMessage(setting=setting, payload=payload)
+        self.assertIsInstance(msg.protobuf(), ppmsg.ControlMessage)
+        wrapped_string = msg.wrap().serialize()
 
         wrapped_msg = pymsg.WrapperMessage.from_serialized_string(wrapped_string)
-        msg = wrapped_msg.unwrap()
+        unwrap_msg = wrapped_msg.unwrap()
+        self.assertEqual(msg.setting, setting, 'Setting bool malformed')
 
-        self.assertEqual(msg.command, command, 'Command malformed')
-        if is_input_a_none:
-            values = [None]
-        if is_input_empty_string:
-            values = ['']
-        self.assertEqual(msg.values, values, 'Values malformed. \nIn : {} \nOut: {}'.format(values, msg.values))
+        if not setting:
+            expected_payload = dict.fromkeys(payload, 0)  # Values get ignored
+            print 'exp :{} '.format(expected_payload)
+        else:
+            expected_payload = payload
 
-        msg_string = msg.wrap().serialize()
+        for key, value in unwrap_msg.payload.iteritems():
+            self.assertTrue(isclose(value, expected_payload[key]),
+                            'Payload malformed. \nIn : {} \nOut: {}'.format(expected_payload[key], value))
+
+        msg_string = unwrap_msg.wrap().serialize()
         self.assertEqual(wrapped_string, msg_string, 'Protobuf serialisations don\'t match')
 
     def test_control_message(self):
-        command_in, value_in = ppmsg.GET_ISO, [1000, 2000, 3000]
         # Below tests should succeed
-        self.control_message_test_helper(command=command_in, values=value_in)
-        self.control_message_test_helper(command=-100, values=value_in)
-        self.control_message_test_helper(command=command_in)
-        self.control_message_test_helper(command=command_in, values=[None])
-        self.control_message_test_helper(command=command_in, values='')
-        self.control_message_test_helper(command=command_in, values=[None, None, None])
+        self.control_message_test_helper(setting=True, payload={'iso': 1000})
+        self.control_message_test_helper(setting=True, payload={'shutter_speed': 1313})
+        self.control_message_test_helper(setting=True, payload={'shutter_speed': 1313, 'iso': 1000, 'brightness': 10})
+        self.control_message_test_helper(setting=False, payload={'iso': 1000})
+        self.control_message_test_helper(setting=True, payload={'iso': 10.1})
 
-        # Below tests should fail assertions to succeed
+        # Below test should 'fail'
         with self.assertRaises(TypeError):
-            self.control_message_test_helper(command=[command_in, command_in], values=[None, None, None])
+            self.control_message_test_helper(setting='string', payload={'iso': 1000})
         with self.assertRaises(TypeError):
-            self.control_message_test_helper(command=[command_in, command_in], values=[None, None, None])
+            self.control_message_test_helper(setting=True, payload={'iso': 'string'})
         with self.assertRaises(TypeError):
-            self.control_message_test_helper(command=None)
-        with self.assertRaises(TypeError):
-            self.control_message_test_helper(command='text command')
-        with self.assertRaises(TypeError):
-            self.control_message_test_helper(values=[10])
-        with self.assertRaises(TypeError):
-            self.control_message_test_helper(command='text command')
-        with self.assertRaises(TypeError):
-            # noinspection PyTypeChecker
-            self.control_message_test_helper(command=None, values=None)
-        with self.assertRaises(TypeError):
-            self.control_message_test_helper(command='', values='')
-        with self.assertRaises(TypeError):
-            self.control_message_test_helper(command='', values=[10, 10.1, 'str'])
+            self.control_message_test_helper(setting=True, payload={10: 1000})
 
     def data_message_test_helper(self, data_code='', data_bytes='', data_string=''):
         data = pymsg.DataMessage(data_code=data_code, data_bytes=data_bytes, data_string=data_string)
@@ -125,27 +127,10 @@ class TestPyMsg(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.data_message_test_helper(data_code='id', data_string=['str list', '2'])
 
-    def timer_test_helper(self, runs, message):
-        assert isinstance(message, pymsg.ProtobufMessageWrapper)
-        start = time.time()
-        for _ in range(0, runs):
-            wrapped_msg = pymsg.WrapperMessage.wrap(message)
-            serial = wrapped_msg.serialize()
-            from_serial = pymsg.WrapperMessage.from_serialized_string(serial)
-            unwrapped = from_serial.unwrap()
-        delta = time.time() - start
-        print '{} {} messages took {} sec. Rate: {} sec per msg'.format(runs, type(message), delta, (delta / runs))
-        return delta, (delta/runs)
-
-
     def test_wrapper_message_timing(self):
         # ident = pymsg.IdentityMessage('10.0.0.5', 'myID')
         # self.timer_test_helper(1000, ident)
-        control = pymsg.ControlMessage(ppmsg.GET_ISO, ['str', 'str2'])
-        self.timer_test_helper(10000, control)
+        control = pymsg.ControlMessage(setting=True, payload={'iso': 1000})
+        timer_test_helper(10000, control)
         # data = pymsg.DataMessage('my data code', 'my data string', 'my data bytes')
         # self.timer_test_helper(1000, data)
-
-
-
-
