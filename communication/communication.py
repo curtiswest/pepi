@@ -54,15 +54,12 @@ class CommunicationSocket(object):
 
     @receive_timeout.setter
     def receive_timeout(self, value):
-        self._socket.sndtimeo = value
+        self._socket.rcvtimeo = value
 
-    @property
-    def router_mandatory(self):
-        return self._socket.router_mandatory
-
-    @router_mandatory.setter
     def router_mandatory(self, value):
-        self._socket.router_mandatory = value
+        if self.type != CommunicationSocket.SocketType.ROUTER:
+            raise self.SocketTypeError('Must be a router to set router_mandatory')
+        self._socket.router_mandatory = int(bool(value))
 
     @property
     def linger(self):
@@ -77,9 +74,6 @@ class CommunicationSocket(object):
             Indicates the type of CommunicationSocket this instance is and therefore which messages are associated
             with the send() and receive() functions.
         """
-        def __init__(self):
-            pass
-
         SERVER = zmq.REP
         REPLY = zmq.REP
         CLIENT = zmq.REQ
@@ -102,15 +96,18 @@ class CommunicationSocket(object):
     class TimeoutError(Exception):
         pass
 
+    class StateError(Exception):
+        pass
+
     def __init__(self, socket_type):
-        if socket_type not in utils.variables_in_class(CommunicationSocket.SocketType).values():
-            raise TypeError('Socket Type must be one of SocketType, not {}'.format(type(socket_type)))
+        if not isinstance(socket_type, int):
+            raise TypeError('Socket_type must be an int, not {}'.format(type(socket_type)))
         self._context = zmq.Context.instance()
         self.type = socket_type
         try:
             self._socket = self._context.socket(socket_type=socket_type)
-        except zmq.ZMQError:
-            raise ValueError("Couldn't construct ZMQ socket. Incorrect socket_type value?")
+        except zmq.ZMQError as e:
+            raise ValueError("Couldn't construct ZMQ socket. Incorrect socket_type value?: {}".format(socket_type), e)
         self.log = logging.getLogger(__name__)
         self._socket.identity = self.generate_id()
         self.data_wrapper_class = None
@@ -126,7 +123,8 @@ class CommunicationSocket(object):
             address (str): the address string to bind to. Format is "protocol://interface:port" e.g. "tcp://*:10000".
                 See ZMQ's `bind` function for more details on the format of the address string.
         """
-        return self._socket.bind(address)
+        if not self._socket.closed:
+            return self._socket.bind(address)
 
     def connect_to(self, address):
         """
@@ -137,7 +135,8 @@ class CommunicationSocket(object):
             address: the address string to bind to. Format is "protocol://interface:port" e.g. "tcp://*:10000".
                 See ZMQ's `bind` function for more details on the format of the address string.
         """
-        return self._socket.connect(address)
+        if not self._socket.closed:
+            return self._socket.connect(address)
 
     def disconnect_from(self, address):
         """
@@ -147,7 +146,8 @@ class CommunicationSocket(object):
            address: the address string to disconnect from. Format is "protocol://interface:port" e.g. "tcp://*:10000".
                See ZMQ's `bind` function for more details on the format of the address string.
         """
-        return self._socket.disconnect(address)
+        if not self._socket.closed:
+            return self._socket.disconnect(address)
 
     def close(self, linger=None):
         """
@@ -163,14 +163,14 @@ class CommunicationSocket(object):
         """
         return self._socket.setsockopt(sockopt, value)
 
-    def getsockopt(self, sockopt, value=None):
+    def getsockopt(self, sockopt):
         """
         Wrapper around the ZMQ method `get_sockopt`. Consult ZMQ documentation for sockopt's and values.
 
         Returns:
             int or string: the socket option retrieved
         """
-        return self._socket.getsockopt(sockopt, value)
+        return self._socket.getsockopt(sockopt)
 
     # Raw ZMQ sending/receiving functions
 
@@ -217,6 +217,8 @@ class CommunicationSocket(object):
             except zmq.ZMQError as e:
                 if e.errno == zmq.EAGAIN:
                     raise self.TimeoutError('Timeout after {} ms'.format(self._socket.sndtimeo))
+                elif e.errno == zmq.EFSM:
+                    raise self.StateError('Cannot send in current state. Out of lock-step?')
                 else:
                     raise
 
@@ -234,7 +236,7 @@ class CommunicationSocket(object):
         if identity is None:
             raise ValueError('A non-None Identity is required to send a multipart message')
         if not isinstance(message, str):
-            raise ValueError('Message must be a str, not {}'.format(type(message)))
+            raise TypeError('Message must be a str, not {}'.format(type(message)))
         if self.type not in {CommunicationSocket.SocketType.ROUTER, CommunicationSocket.SocketType.DEALER}:
             raise CommunicationSocket.SocketTypeError('Only sockets of type ROUTER/DEALER can send multipart')
         msg_parts = [identity, '', message]
@@ -287,6 +289,8 @@ class CommunicationSocket(object):
             except zmq.ZMQError as e:
                 if e.errno == zmq.EAGAIN:
                     raise self.TimeoutError('Receive timed out after {} ms'.format(self._socket.sndtimeo))
+                elif e.errno == zmq.EFSM:
+                    raise self.StateError('Cannot receive in current state. Out of lock-step?')
                 else:
                     raise
 
@@ -359,13 +363,14 @@ class Poller(object):
 
     # noinspection PyClassHasNoInit,PyMissingOrEmptyDocstring
     class PollingType:
+        NONE = 0
         POLLIN = zmq.POLLIN
         POLLOUT = zmq.POLLOUT
+        POLLINOUT = zmq.POLLIN | zmq.POLLOUT
 
     def __init__(self):
         self._poller = zmq.Poller()
         self.registered_sockets = dict()
-        self.printed = False
 
     # noinspection PyProtectedMember
     def register(self, comm_socket, polling_type):
@@ -381,9 +386,13 @@ class Poller(object):
         # type: (CommunicationSocket, int) -> bool
         if not isinstance(comm_socket, CommunicationSocket):
             raise TypeError('Comm_socket must be a CommunicationSocket, not {}'.format(type(comm_socket)))
+        try:
+            polling_type = int(polling_type)
+        except TypeError:
+            raise TypeError('Cannot convert polling_type to int, is of type: {}'.format(type(polling_type)))
+
         if polling_type not in utils.variables_in_class(Poller.PollingType).values():
-            raise AssertionError('BINGO: {}'.format(utils.variables_in_class(Poller.PollingType)))
-        # if not polling_type in {Poller.PollingType.POLLIN}
+            raise ValueError('Given polling_type ({}) is not valid'.format(polling_type))
         self.registered_sockets[str(comm_socket._socket)] = comm_socket
         return self._poller.register(comm_socket._socket, polling_type)
 

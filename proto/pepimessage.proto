@@ -2,7 +2,8 @@ syntax="proto3";
 
 message IdentityMessage {
     string ip = 1;
-    string identifier = 4;
+    string identifier = 2;
+    bool is_stream = 3;
 }
 
 message DataMessage {
@@ -28,5 +29,4 @@ message WrapperMessage {
 message InprocMessage {
     string msg_req = 1;
     string server_id = 2;
-    string serial_msg = 3;
 }

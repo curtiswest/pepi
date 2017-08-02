@@ -1,13 +1,15 @@
 #!/usr/local/opt/pyenv/shims/python
+from __future__ import print_function
+
 """
 New_client.py: Provides the class used to run the client-side software for Pepi. Currently only works in the terminal,
 but will probably be refactored into a separate process for implementation of a GUI at a later date.
 """
 import datetime
 import os
-import subprocess
 import logging
 import logging.config
+import subprocess
 import sys
 import signal
 import time
@@ -33,27 +35,30 @@ class KnownServer:
     A server that the client knows exists through dynamic discovery.
     """
     # def __init__(self, ip, ident_socket_id=None, control_socket_id=None, data_socket_id=None):
-    def __init__(self, ip, socket_id=None, health=0):
+    def __init__(self, ip, socket_id=None, streaming_socket_id=None, health=0):
         self.ip = ip
         self.socket_id = socket_id
+        self.streaming_socket_id = streaming_socket_id
         self.health = health
 
     def is_complete(self):
         return self.ip and self.socket_id
 
+    def has_streaming_socket(self):
+        return bool(self.streaming_socket_id)
+
     def is_alive(self):
         return self.health > 0
 
     def __key(self):
-        return self.ip, self.socket_id
+        return self.ip, self.socket_id, self.streaming_socket_id
 
     def __eq__(self, other):
         return any(self.__key()[i] == other.__key()[i] for i in range(0, len(self.__key())))
 
     def __hash__(self):
-        ip, id_, = self.__key()
-        tup = ip, str(id_)
-        return hash(tup)
+        ip, id_, sid = self.__key()
+        return hash((ip, str(id_), str(sid)))
 
     def __str__(self):
         return str(self.__key())
@@ -74,7 +79,7 @@ class TerminalThread(StoppableThread):
         while not self.is_stopped():
             inp = raw_input('Command: ')
             if inp.strip() == 'exit':
-                print 'Exiting..'
+                print('Exiting..')
                 msg = InprocMessage('exit')
                 self.comm_inproc.send(msg.wrap().serialize())
                 self.stop()
@@ -122,7 +127,7 @@ class CommunicationThread(StoppableThread):
             else:
                 return False
 
-    HB_INTERVAL = 10  # Seconds between heartbeats to client
+    HB_INTERVAL = 9  # Seconds between heartbeats to client
     HB_HEALTH = 3  # Number of heartbeats missed before assumed dead
 
     def __init__(self):
@@ -132,6 +137,7 @@ class CommunicationThread(StoppableThread):
         self.queued_data = collections.defaultdict(list)
         self.image_dir = ''
         self.player = None
+        self.streaming_server_id = None
 
         # Setup client<->server socket
         self.socket = CommunicationSocket(CommunicationSocket.SocketType.ROUTER)
@@ -171,23 +177,35 @@ class CommunicationThread(StoppableThread):
     def ident_message_handler(self, socket, identity, message, server=None, server_id=None):
         assert server is None or isinstance(server, KnownServer)
         logging.debug('Handling ident message')
-        if not server:
+        # if not server or not server_id:
             # Try to identify by the server's id given in the message. This may occur when we miss all the heartbeats
             # from the client, causing the client to recreate new sockets (with a new identity). The server will keep
             # its identity and data storage, so if we can identify it in our existing known servers, we can still
             # communicate with it just the same by updating the server's socket identity.
+        for server_id_, server in self.known_servers.iteritems():
+            if message.identifier == server_id_:
+                logging.warn('Reconnecting server, but with a new ID. May have missed heartbeats.')
+                break
+        else:
             for server_id_, server in self.known_servers.iteritems():
-                if message.identifier == server_id_:
-                    server = self.known_servers[server_id_]
-                    logging.warn('Reconnecting server, but with a new ID. May have missed heartbeats.')
+                if server.socket_id == identity:
+                    break
+                elif server.streaming_socket_id == identity:
+                    if not message.is_stream:
+                        logging.warn('Identified this identity as a streaming socket, but not a is_stream ident msg?')
                     break
             else:
                 # Must be an ident from a new/unknown server
-                server = KnownServer(message.ip, health=self.HB_HEALTH)
+                server_id_ = message.identifier
+                self.known_servers[message.identifier] = KnownServer(ip=message.ip, health=self.HB_HEALTH)
 
-        server.ip = message.ip
-        server.socket_id = identity
-        self.known_servers[message.identifier] = server  # Store into dict
+        self.known_servers[server_id_].ip = message.ip
+        if message.is_stream:
+            # Update the server's streaming socket id instead
+            self.known_servers[server_id_].streaming_socket_id = str(identity)
+        else:
+            self.known_servers[server_id_].socket_id = identity
+        # self.known_servers[server_id_] = server  # Store into dict
         socket.send_multipart(identity, self.ident_msg_serial)  # Reply with our ident
 
     def control_message_handler(self, socket, identity, message, server=None, server_id=None):
@@ -221,27 +239,31 @@ class CommunicationThread(StoppableThread):
                     logging.warn('Requested data item {} is unavailable.'.format(int(value)))
                     self.queued_data[server_id].remove(int(value))
                 else:
-                    if message.setting:
-                        print '{} was set to {}'.format(key, value)
+                    print('Server replied: {} = {}'.format(key, value))
 
-    def data_message_handler(self, socket, identity, message, server=None, server_id=None):
+    def data_message_handler(self, socket, identity, message, server=None, server_id=None, is_stream=False):
         assert server is None or isinstance(server, KnownServer)
         logging.debug('Handling data message')
         if not server or not server_id:
             logging.info('Data message from unknown server/server_id. No response..')
         else:
-            if message.data_bytes:
-                if server_id in self.queued_data.keys():
-                    # TODO move streaming to the new socket
-                    image = utils.decode_image(message.data_bytes)
-                    fname = self.image_dir + '/' + server_id + '_' + message.data_code
-                    cv2.imwrite('{}.png'.format(fname), image)
-                    # Remove the data from the internal data queue
-                    self.queued_data[server_id].remove(message.data_code)
-                else:
-                    logging.error('Data from unknown data source/server!')
-            if message.data_string:
-                raise NotImplementedError('Cannot yet handle DataMessages with data_string')
+            if is_stream:
+                # Eject out to player
+                print('Frame data size: {} bytes'.format(len(message.data_bytes)))
+                self.player.stdin.write(message.data_bytes)
+            else:
+                if message.data_bytes:
+                    if server_id in self.queued_data.keys():
+                        # TODO move streaming to the new socket
+                        image = utils.decode_image(message.data_bytes)
+                        fname = self.image_dir + '/' + server_id + '_' + message.data_code
+                        cv2.imwrite('{}.png'.format(fname), image)
+                        # Remove the data from the internal data queue
+                        self.queued_data[server_id].remove(message.data_code)
+                    else:
+                        logging.error('Data from unknown data source/server!')
+                if message.data_string:
+                    raise NotImplementedError('Cannot yet handle DataMessages with data_string')
 
     def inproc_message_handler(self, socket, identity, message):
         assert isinstance(message, InprocMessage), 'Inproc handler get a non-InprocMessage message'
@@ -250,6 +272,8 @@ class CommunicationThread(StoppableThread):
         parts = message.msg_req.split()
         if parts:
             if 'exit' in parts:
+                if self.player:
+                    self.player.kill()
                 self.socket.close()
                 self.stop()
 
@@ -270,49 +294,69 @@ class CommunicationThread(StoppableThread):
                             logging.warn('Tried to download data_code {}, but is expired'.format(data_item.code))
                             self.queued_data[server_id].remove(data_item)
 
-            if parts[0] == 'get':
+            elif 'start_stream' in parts:
+                if not self.streaming_server_id:
+                    # TODO server selection
+                    if len(self.known_servers.keys()) > 0:
+                        server_id = self.known_servers.keys()[0]
+                        server = self.known_servers[server_id]
+                        req_msg = ControlMessage(setting=False, payload={'start_stream': None}).wrap().serialize()
+                        self.socket.send_multipart(server.socket_id, req_msg)
+                        self.streaming_server_id = server_id
+
+                        if self.player is None:
+                            cmdline = ['/Applications/VLC.app/Contents/MacOS/VLC', '--demux', 'h264',
+                                       '--network-caching=1000', '-']
+                            self.player = subprocess.Popen(cmdline, stdin=subprocess.PIPE)
+                    else:
+                        print('Cannot stream - no servers connected.')
+                else:
+                    print('Server {} is already streaming'.format(self.streaming_server_id))
+            elif 'stop_stream' in parts:
+                if self.player:
+                    self.player.kill()
+                    self.player = None
+                if self.streaming_server_id in self.known_servers:
+                    server = self.known_servers[self.streaming_server_id]
+                    req_msg = ControlMessage(setting=False, payload={'stop_stream': None}).wrap().serialize()
+                    self.known_servers[self.streaming_server_id].streaming_socket_id = None
+                    self.streaming_server_id = None
+                    self.socket.send_multipart(server.socket_id, req_msg)
+                else:
+                    print('No server is currently streaming.')
+            elif 'get' in parts:
+                get_parts = parts[parts.index('get')+1:]
                 req_msg = ControlMessage(setting=False, payload={})
                 # Meta message parts
-                if 'servers' in parts:
-                    print 'Known servers\'s IDs: {}'.format(self.known_servers.keys())
-                if 'data_codes' in parts:
-                    print 'Queued data: {}'.format(self.queued_data)
+                if 'servers' in get_parts:
+                    get_parts.remove('servers')
+                    print('Known servers\'s IDs: {}'.format(self.known_servers.keys()))
+
+                if 'data_codes' in get_parts:
+                    get_parts.remove('data_codes')
+                    print('Queued data: {}'.format(self.queued_data))
 
                 # Control message parts
-                if 'still' in parts:
-                    req_msg.payload['still'] = None
-                if 'iso' in parts:
-                    req_msg.payload['iso'] = None
-                if 'shutter_speed' in parts:
-                    req_msg.payload['shutter_speed'] = None
-                if 'brightness' in parts:
-                    req_msg.payload['brightness'] = None
+                for part in get_parts:
+                    req_msg.payload[part] = None
 
                 for s in self.known_servers.values():
                     if s.is_complete() and s.is_alive():
                         self.socket.send_multipart(s.socket_id, req_msg.wrap().serialize())
-            elif parts[0] == 'set':
-                pass
+            elif 'set' in parts:
+                set_parts = parts[parts.index('set')+1:]
+                set_pairs = dict()
+
+                for i in range(0,len(set_parts), 2):
+                    command = set_parts[i]
+                    try:
+                        value = set_parts[i+1]
+                    except IndexError:
+                        logging.warn('Command {} was missing a value to set. Ignoring..'.format(command))
+                    else:
+                        set_pairs[command] = value
         else:
             pass  # Empty message
-
-        # elif message.msg_req.startswith('start stream'):
-        #     # TODO: implement server selection
-        #     cmdline = ['/Applications/VLC.app/Contents/MacOS/VLC', '--demux', 'h264', '-']
-        #     self.player = subprocess.Popen(cmdline, stdin=subprocess.PIPE)
-        #     # self.start_time = time.time()
-        #     # self.frames = 0
-        #     req_msg = ControlMessage(ppmsg.START_STREAM).wrap().serialize()
-        #     test_server = self.known_servers.values()[0]
-        #     self.socket.send_multipart(test_server.socket_id, req_msg)
-        # elif message.msg_req == 'stop stream':
-        #     self.player.terminate()
-        #     # delta = time.time() - self.start_time
-        #     req_msg = ControlMessage(ppmsg.STOP_STREAM).wrap().serialize()
-        #     test_server = self.known_servers.values()[0]
-        #     self.socket.send_multipart(test_server.socket_id, req_msg)
-        #     # logging.info('Got {} frames in {}s. Frame rate: {} fps'.format(self.frames, delta,
-        #     #                                                               (self.frames / delta)))
 
     def server_message_router(self, socket, identity, message):
         """
@@ -330,22 +374,28 @@ class CommunicationThread(StoppableThread):
         if isinstance(message, InprocMessage):
             self.inproc_message_handler(socket, identity, message)
         else:
-            identified_server = None
-            server_id = None
             for server_id, server in self.known_servers.iteritems():
                 if server.socket_id == identity:
-                    server.health = self.HB_HEALTH
-                    identified_server = server
+                    is_stream = False
+                    self.known_servers[server_id].health = self.HB_HEALTH  # Reset health of this server
                     break
+                elif server.streaming_socket_id == identity:
+                    self.known_servers[server_id].health = self.HB_HEALTH
+                    is_stream = True
+                    break
+            else:
+                server = None
+                server_id = None
+                is_stream = False
 
             if isinstance(message, IdentityMessage):
-                self.ident_message_handler(socket, identity, message, identified_server, server_id)
-            elif identified_server is not None:
+                self.ident_message_handler(socket, identity, message, server, server_id)
+            elif server is not None:
                 try:
                     if isinstance(message, ControlMessage):
-                        self.control_message_handler(socket, identity, message, identified_server, server_id)
+                        self.control_message_handler(socket, identity, message, server, server_id)
                     elif isinstance(message, DataMessage):
-                        self.data_message_handler(socket, identity, message, identified_server, server_id)
+                        self.data_message_handler(socket, identity, message, server, server_id, is_stream=is_stream)
                     else:
                         raise TypeError('Cannot handle message of type {}'.format(type(message)))
                 except CommunicationSocket.TimeoutError:
@@ -374,10 +424,7 @@ class CommunicationThread(StoppableThread):
                         dead_server_ids.append(server_id)
                         logging.warn('Server {} is dead'.format(server_id))
                         continue
-                    elif server.health == self.HB_HEALTH:
-                        # Max health, must have received messages from that server so don't need to heartbeat
-                        pass
-                    else:
+                    elif server.health < self.HB_HEALTH:
                         # Less than max health, might die soon
                         logging.debug('Need a heartbeat from server at {} soon. Health: {}'.format(server.ip,
                                                                                                    server.health))
@@ -402,7 +449,6 @@ class CommunicationThread(StoppableThread):
                     identity, data = None, socket.receive()
                 else:
                     identity, data = socket.receive_multipart()
-
                 msg = WrapperMessage.from_serialized_string(data).unwrap()
                 self.server_message_router(socket, identity, msg)
         else:
@@ -411,7 +457,7 @@ class CommunicationThread(StoppableThread):
 
 class ClientBackend(object):
     def __init__(self):
-        logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%%(levelname)-8s: %(message)s')
+        logging.basicConfig(stream=sys.stdout, level=logging.WARN, format='%%(levelname)-8s: %(message)s')
 
         # Setup local environment
         logging.config.fileConfig('setup/logging_config.ini')

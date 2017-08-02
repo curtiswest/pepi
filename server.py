@@ -1,20 +1,22 @@
 #!/usr/bin/python
-import time
-import threading
-import logging
-import sys
-import signal
-import uuid
 import atexit
+import logging
+import signal
+import sys
+import threading
+import time
+import uuid
 from subprocess import check_output
-from stoppablethread import StoppableThread
+import random
+
 from picamera import PiCamera
 from picamera.array import PiRGBArray
+
 import pepi_config
+import utils
 from communication.communication import CommunicationSocket, Poller
 from communication.pymsg import *
-import communication.pepimessage_pb2 as ppmsg
-import utils
+from stoppablethread import StoppableThread
 
 __author__ = 'Curtis West, Claudio Pizzolato'
 __copyright__ = 'Copyright 2017, Curtis West, Claudio Pizzolato'
@@ -25,21 +27,19 @@ __status__ = 'Development'
 
 
 class StreamingThread(StoppableThread):
-    def __init__(self, camera_instance, identity_message):
-        assert isinstance(identity_message, IdentityMessage)
+    def __init__(self, camera_instance, identity):
         super(StreamingThread, self).__init__()
-        raise NotImplementedError('StreamingThread needs to be rewritten with it\'s own socket as sockets aren\'t'
-                                  'thread-safe')
         self.camera_instance = camera_instance
         self.socket = CommunicationSocket(CommunicationSocket.SocketType.DEALER)
-        self.socket.identity = uuid.uuid4().hex[:8]
+        self.socket.identity = str(identity)
         self.socket.connect_to('tcp://{}:{}'.format(pepi_config.CLIENT_IP, pepi_config.IDENT_PORT))
-        self.socket.send(identity_message.wrap().serialize())
+        ident_msg = IdentityMessage(check_output(['hostname', '-I']).rstrip(), Server.get_server_id().zfill(16), is_stream=True)
+        self.socket.send(ident_msg.wrap().serialize())
 
         self.old_resolution = self.camera_instance.resolution
         self.old_framerate = self.camera_instance.framerate
         self.camera_instance.resolution = pepi_config.RESOLUTION_640
-        self.camera_instance.framerate = 24
+        self.camera_instance.framerate = 25
         self.camera_instance.start_preview()
         self.socket.data_wrapper_class = FileLikeDataWrapper.serialize_data  # TODO: refactor into better design
 
@@ -50,6 +50,7 @@ class StreamingThread(StoppableThread):
         self.camera_instance.stop_recording()
         self.camera_instance.framerate = self.old_framerate
         self.camera_instance.resolution = self.old_resolution
+        self.socket.close(linger=5)
 
 
 class Server:
@@ -57,18 +58,19 @@ class Server:
     HB_MAX_INTERVAL = 15  # Seconds between heartbeats to client
     HB_HEALTH = 3  # Number of heartbeats missed before assumed dead
     HB_BACKOFF_RATE = 1.75
-    DATA_EXPIRY_SECONDS = 60 * 10 # How long a capture data item is guaranteed to be available on this server
+    DATA_EXPIRY_SECONDS = 60 * 10  # How long a capture data item is guaranteed to be available on this server
 
     def exit_handler(self):
         logging.info("Exit Handler: cleaning up..")
+        if self.is_streaming:
+            logging.info("Exit Handler: stopping streaming..")
+            self.stream_thread.stop()
         if self.camera is not None:
             logging.info("Exit Handler: closing camera..")
             self.camera.close()
         if self.socket:
             logging.info("Exit Handler: closing socket..")
             self.socket.close()
-        if self.is_streaming:
-            self.stream_thread.stop()
 
         logging.info("Exit Handler: complete & exiting")
 
@@ -113,14 +115,17 @@ class Server:
         self.queued_data.pop(with_data_code, None)
 
     def socket_setup(self):
+        if self.is_streaming:
+            self.stream_thread.stop()
+            self.is_streaming = False
         if self.socket:
             # Socket exists, need to destroy
             self.poller.unregister(self.socket)
             self.socket.close(linger=0)
             self.socket = None
         self.socket = CommunicationSocket(CommunicationSocket.SocketType.DEALER)
-        # self.socket.identity = generate_server_seeded_id()
         self.socket.identity = uuid.uuid4().hex[:8]
+        logging.debug('Socket identity set to: {}'.format(self.socket.identity))
         self.socket.linger = 0
         self.socket.receive_timeout = 1000
         self.socket.send_timeout = 1000
@@ -198,7 +203,7 @@ class Server:
                 wrapped_msg = WrapperMessage.from_serialized_string(data)
                 self.message_router(socket=socket, message=wrapped_msg.unwrap())
 
-    def ident_message_handler(self, socket, message):
+    def ident_message_handler(self, message):
         logging.debug('Received an IdentityMessage: {}'.format(message))
         if not self.connected_client_id:
             logging.debug('Got client {} for the first time'.format(message.identifier))
@@ -213,7 +218,7 @@ class Server:
         setting = message.setting  # Shorthand access to setting
         reply = ControlMessage(setting=True, payload={})  # Reply message that is built upon and sent at end
 
-        if 'still' in message.payload.keys():
+        if 'still' in message.payload:
             # Get stills first, as time sensitive
             reply.payload['still'] = self.next_data_code
             reply.payload['expiry'] = self.DATA_EXPIRY_SECONDS  # TODO implement data expiry
@@ -252,17 +257,17 @@ class Server:
                     self.camera.sharpness = value
                 reply.payload[key] = self.camera.sharpness
             elif key == 'start_stream':
+                id = random.randint(1000,9999)
+                reply.payload[key] = id
+                reply.payload['stream_socket_id'] = id
                 # TODO implement streaming with a new socket and thread - sockets aren't threadsafe
-                # self.socket.send(control_reply.wrap().serialize())
-                # self.is_streaming = True
-                # self.stream_thread = StreamingThread(self.camera, self.socket, self.ident_msg)
-                # self.stream_thread.daemon = True
-                # self.stream_thread.start()
-                pass
+                self.stream_thread = StreamingThread(self.camera, id)
+                self.stream_thread.daemon = True
+                self.is_streaming = True
+                self.stream_thread.start()
             elif key == 'stop_stream':
-                # self.is_streaming = False
-                # self.stream_thread.stop()
-                pass
+                self.is_streaming = False
+                self.stream_thread.stop()
             elif key == 'awb_red':
                 pass
             elif key == 'awb_blue':
@@ -312,13 +317,14 @@ class Server:
 
         # Handle each different type of message
         if isinstance(message, IdentityMessage):
-            self.ident_message_handler(socket, message)
+            self.ident_message_handler(message)
         elif isinstance(message, ControlMessage):
             self.control_message_handler(socket, message)
         elif isinstance(message, DataMessage):
             self.data_message_handler(message)
         else:
             raise TypeError('Cannot handle message of type {}'.format(type(message)))
+
 
 if __name__ == '__main__':
     s = Server()

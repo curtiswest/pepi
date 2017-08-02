@@ -36,6 +36,12 @@ class ProtobufMessageWrapper(object):
     def __init__(self):
         pass
 
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def __str__(self):
         return str(self.protobuf())
 
@@ -107,7 +113,7 @@ class WrapperMessage(ProtobufMessageWrapper):
         # type: () -> ProtobufMessageWrapper
         set_msg = self.pb.WhichOneof('msg')
         if set_msg == 'ident':
-            msg = IdentityMessage(self.pb.ident.ip, self.pb.ident.identifier)
+            msg = IdentityMessage(self.pb.ident.ip, self.pb.ident.identifier, self.pb.ident.is_stream)
         elif set_msg == 'control':
             pb = self.pb.control
             setting = pb.setting
@@ -121,7 +127,7 @@ class WrapperMessage(ProtobufMessageWrapper):
             msg = DataMessage(data_code=data_code, data_string=data_string, data_bytes=data_bytes)
         elif set_msg == 'inproc':
             pb = self.pb.inproc
-            msg = InprocMessage(pb.msg_req, pb.server_id, pb.serial_msg)
+            msg = InprocMessage(pb.msg_req, pb.server_id)
         else:
             raise NotImplementedError('The Protobuf that unwrap() is working on contains an unknown field in the Oneof '
                                       'field. Specifically, unwrap() cannot handle the field ({}).'.format(set_msg))
@@ -140,18 +146,10 @@ class WrapperMessage(ProtobufMessageWrapper):
         Raises:
             MessageTypeError: when given a `message` that cannot be handled or is of the wrong type
         """
-        def _ingest_message(destination, source, has_nested_types=False, has_dict_type=False):
+        def _ingest_message(destination, source, has_dict_type=False):
             protobuf = source.protobuf()
             for descriptor in protobuf.DESCRIPTOR.fields:
-                if has_nested_types:
-                    try:
-                        if protobuf.HasField(descriptor.name):
-                            values = getattr(getattr(protobuf, descriptor.name), 'values')
-                            field = getattr(getattr(destination, descriptor.name), 'values')
-                            field.extend(values)
-                    except ValueError:
-                        setattr(destination, descriptor.name, getattr(protobuf, descriptor.name))
-                elif has_dict_type:
+                if has_dict_type:
                     try:
                         setattr(destination, descriptor.name, getattr(protobuf, descriptor.name))
                     except AttributeError:
@@ -200,9 +198,8 @@ class IdentityMessage(ProtobufMessageWrapper):
     """
     Encapsulates an IdentityMessage .proto message.
     """
-
     # noinspection PyMissingConstructor
-    def __init__(self, ip, identifier):
+    def __init__(self, ip, identifier, is_stream=False):
         """
         Initialises a IdentityMessage with the given `ip` and `identifier`.
         Args:
@@ -215,6 +212,7 @@ class IdentityMessage(ProtobufMessageWrapper):
             raise ValueError('Identifier cannot be None nor empty')
         self.ip = ip
         self.identifier = identifier
+        self.is_stream = bool(is_stream)
 
     def protobuf(self):
         """
@@ -225,6 +223,7 @@ class IdentityMessage(ProtobufMessageWrapper):
         pb = ppmsg.IdentityMessage()
         pb.ip = self.ip
         pb.identifier = self.identifier
+        pb.is_stream = bool(self.is_stream)
         return pb
 
 
@@ -232,7 +231,6 @@ class ControlMessage(ProtobufMessageWrapper):
     """
     Encapsulates an ControlMessage .proto message.
     """
-
     @property
     def payload(self):
         return self._payload
@@ -247,9 +245,12 @@ class ControlMessage(ProtobufMessageWrapper):
             if any(not isinstance(x, (int, float)) and x is not None for x in value.values()):
                 raise TypeError('All values must be int, floats or None')
             cleaned_dict = dict()
-            for key, value in value.iteritems():
-                cleaned_dict[key.strip().lower()] = value
-            self._payload = cleaned_dict
+            for key, value_ in value.iteritems():
+                cleaned_dict[key.strip().lower()] = value_
+            if self._payload:
+                self._payload.update(cleaned_dict)
+            else:
+                self._payload = cleaned_dict
         else:
             self._payload = None
 
@@ -263,8 +264,10 @@ class ControlMessage(ProtobufMessageWrapper):
         Raises:
             TypeError: when command is not an int, or values are of mixed type
         """
+        self._payload = None
         self.setting = setting
         self.payload = payload
+
 
     def protobuf(self):
         """
@@ -275,13 +278,11 @@ class ControlMessage(ProtobufMessageWrapper):
         pb = ppmsg.ControlMessage()
         pb.setting = self.setting
 
-        if not self.setting and self.payload is not None:
-            payload = dict.fromkeys(self.payload, 0)  # If getting, only payload keys are kept, values are ignored
-        else:
-            payload = self.payload
+        pb_dict = dict()
 
-        for key, value in payload.iteritems():
-            pb.payload[key] = value
+        if self.payload is not None:
+            for key, value in self.payload.iteritems():
+                pb.payload[key] = value if value is not None and self.setting else 0.0
         return pb
 
 
@@ -289,6 +290,12 @@ class DataMessage(ProtobufMessageWrapper):
     """
     Encapsulates an DataMessage .proto message.
     """
+    # def __eq__(self, other):
+    #     return self.data_code == other.data_code and self.data_string == other.data_string and\
+    #            self.data_bytes == other.data_bytes
+    #
+    # def __ne__(self, other):
+    #     return not self.__eq__(other)
 
     # noinspection PyMissingConstructor
     def __init__(self, data_code, data_string='', data_bytes='', info=None):
@@ -331,16 +338,28 @@ class DataMessage(ProtobufMessageWrapper):
 
 
 class InprocMessage(ProtobufMessageWrapper):
-    def __init__(self, msg_req, server_id='', serial_msg=''):
-        self.msg_req = msg_req
-        self.server_id = server_id
-        self.serial_msg = serial_msg
+    """
+    A message between two thread (in-process message).
+    """
+    def __init__(self, msg_req, server_id=''):
+        """
+        Initialises a InprocMessage with the given parameters.
+        Args:
+            msg_req (str): the request associated with the message
+            server_id (str): the server requesting the message (an ID)
+        """
+        self.msg_req = '' if msg_req is None else msg_req
+        self.server_id = '' if server_id is None else server_id
 
     def protobuf(self):
+        """
+        Generates the actual Protobuf representation of this message.
+        Returns:
+            ppmsg.DataMessage: a protobuf of this message
+        """
         pb = ppmsg.InprocMessage()
         pb.msg_req = self.msg_req
         pb.server_id = self.server_id
-        pb.serial_msg = self.serial_msg
         return pb
 
 

@@ -24,6 +24,25 @@ def timer_test_helper(runs, message):
 
 
 class TestPyMsg(unittest.TestCase):
+    def inproc_message_helper(self, msg_req='', server_id=''):
+        inproc = pymsg.InprocMessage(msg_req=msg_req, server_id=server_id)
+        self.assertIsInstance(inproc.protobuf(), ppmsg.InprocMessage)
+        wrapped_string = inproc.wrap().serialize()
+
+        wrapped_msg = pymsg.WrapperMessage.from_serialized_string(wrapped_string)
+        msg = wrapped_msg.unwrap()
+        self.assertEqual(msg.msg_req, msg_req, 'msg_req malformed')
+        self.assertEqual(msg.server_id, server_id, 'server_id malformed')
+
+        msg_string = msg.wrap().serialize()
+        self.assertEqual(wrapped_string, msg_string, 'Protobuf serialisations don\'t match')
+
+    def test_inproc_message(self):
+        self.inproc_message_helper('req', 'sid')
+        self.inproc_message_helper('req')
+        self.inproc_message_helper()
+
+
     def ident_message_helper(self, ip=None, identifier=None):
         ident = pymsg.IdentityMessage(ip, identifier)
         self.assertIsInstance(ident.protobuf(), ppmsg.IdentityMessage)
@@ -65,7 +84,6 @@ class TestPyMsg(unittest.TestCase):
 
         if not setting:
             expected_payload = dict.fromkeys(payload, 0)  # Values get ignored
-            print 'exp :{} '.format(expected_payload)
         else:
             expected_payload = payload
 
@@ -83,10 +101,13 @@ class TestPyMsg(unittest.TestCase):
         self.control_message_test_helper(setting=True, payload={'shutter_speed': 1313, 'iso': 1000, 'brightness': 10})
         self.control_message_test_helper(setting=False, payload={'iso': 1000})
         self.control_message_test_helper(setting=True, payload={'iso': 10.1})
+        self.control_message_test_helper(setting=True, payload=None)
 
         # Below test should 'fail'
         with self.assertRaises(TypeError):
             self.control_message_test_helper(setting='string', payload={'iso': 1000})
+        with self.assertRaises(TypeError):
+            self.control_message_test_helper(setting='string', payload='not a dict')
         with self.assertRaises(TypeError):
             self.control_message_test_helper(setting=True, payload={'iso': 'string'})
         with self.assertRaises(TypeError):
@@ -126,6 +147,37 @@ class TestPyMsg(unittest.TestCase):
             self.data_message_test_helper(data_code='', data_string=[123])
         with self.assertRaises(TypeError):
             self.data_message_test_helper(data_code='id', data_string=['str list', '2'])
+
+    def test_wrapping_messages(self):
+        with self.assertRaises(pymsg.ProtobufMessageWrapper.MessageTypeError):
+            pymsg.WrapperMessage('not a protobuf')
+
+        with self.assertRaises(pymsg.ProtobufMessageWrapper.MessageTypeError):
+            pymsg.WrapperMessage.wrap('not a message type')
+
+        control = pymsg.ControlMessage(setting=True, payload={'iso': 1000})
+        wrapped = control.wrap()
+        self.assertEqual(wrapped.unwrap(), control)
+
+        data = pymsg.DataMessage('datacode', 'datastring')
+        wrapped = data.wrap()
+        self.assertEqual(wrapped.unwrap(), data)
+
+        ident = pymsg.IdentityMessage('ip', 'id', True)
+        wrapped = ident.wrap()
+        self.assertEqual(wrapped.unwrap(), ident)
+
+        inproc = pymsg.InprocMessage('msg_req', '1')
+        wrapped = inproc.wrap()
+        self.assertEqual(wrapped.unwrap(), inproc)
+
+        with self.assertRaises(pymsg.ProtobufMessageWrapper.DecodeError):
+            _ = pymsg.WrapperMessage.from_serialized_string('not a real protubuf string!')
+
+    def test_protobuf_abstract_class(self):
+        with self.assertRaises(TypeError):
+            abstract = pymsg.ProtobufMessageWrapper()
+            abstract.protobuf()
 
     def test_wrapper_message_timing(self):
         # ident = pymsg.IdentityMessage('10.0.0.5', 'myID')
