@@ -8,6 +8,7 @@ enabling asynchronous responses.
 import logging
 import uuid
 import zmq
+
 import utils
 
 __author__ = 'Curtis West'
@@ -110,7 +111,8 @@ class CommunicationSocket(object):
             raise ValueError("Couldn't construct ZMQ socket. Incorrect socket_type value?: {}".format(socket_type), e)
         self.log = logging.getLogger(__name__)
         self._socket.identity = self.generate_id()
-        self.data_wrapper_class = None
+        self.data_wrapper_func = None
+        self.data_wrapper_args = None
 
     # Socket setup functions
 
@@ -210,17 +212,29 @@ class CommunicationSocket(object):
             raise CommunicationSocket.SocketTypeError('Routers must use send_multipart with an identity')
         if self.type == CommunicationSocket.SocketType.DEALER:
             # Dealers need to insert empty frame to maintain REQ/REP compatibility
-            self._socket.send_multipart(msg_parts=['', message])
-        else:
             try:
-                self._send_raw(message)
-            except zmq.ZMQError as e:
+                self._socket.send_multipart(msg_parts=['', message])
+            except (zmq.ZMQError, zmq.error) as e:
                 if e.errno == zmq.EAGAIN:
                     raise self.TimeoutError('Timeout after {} ms'.format(self._socket.sndtimeo))
                 elif e.errno == zmq.EFSM:
                     raise self.StateError('Cannot send in current state. Out of lock-step?')
                 else:
                     raise
+            except zmq.error.Again as e:
+                raise self.TimeoutError('Timeout after {} ms'.format(self._socket.sndtimeo))
+        else:
+            try:
+                self._send_raw(message)
+            except (zmq.ZMQError, zmq.error) as e:
+                if e.errno == zmq.EAGAIN:
+                    raise self.TimeoutError('Timeout after {} ms'.format(self._socket.sndtimeo))
+                elif e.errno == zmq.EFSM:
+                    raise self.StateError('Cannot send in current state. Out of lock-step?')
+                else:
+                    raise
+            except zmq.error.Again as e:
+                raise self.TimeoutError('Timeout after {} ms'.format(self._socket.sndtimeo))
 
     def send_multipart(self, identity, message):
         """
@@ -242,12 +256,14 @@ class CommunicationSocket(object):
         msg_parts = [identity, '', message]
         try:
             return self._socket.send_multipart(msg_parts=msg_parts)
-        except zmq.ZMQError as e:
+        except (zmq.ZMQError, zmq.error) as e:
             if e.errno == zmq.EAGAIN:
                 raise self.TimeoutError('Send multipart timed out after {} ms'.format(self._socket.sndtimeo))
             elif e.errno == zmq.EHOSTUNREACH:
                 raise self.MessageRoutingError('No route to given identity ({}). Identity incorrect, or recipient not '
                                            'connected?'.format(identity))
+        except zmq.error.Again as e:
+            raise self.TimeoutError('Timeout after {} ms'.format(self._socket.sndtimeo))
 
     def receive_multipart(self):
         """
@@ -294,10 +310,7 @@ class CommunicationSocket(object):
                 else:
                     raise
 
-
-
     def write(self, data):
-        # TODO: implement using protobuf for consistency
         """
         Writes to this CommunicationSocket in a file-like manner. Not yet implemented.
         Args:
@@ -305,8 +318,11 @@ class CommunicationSocket(object):
         """
         if self.type == CommunicationSocket.SocketType.ROUTER:
             raise CommunicationSocket.SocketTypeError('ROUTERs may not use write function as they require an identity')
-        if self.data_wrapper_class:
-            data = self.data_wrapper_class('stream', data)
+        if self.data_wrapper_func:
+            if self.data_wrapper_args:
+                data = self.data_wrapper_func(data, **self.data_wrapper_args)
+            else:
+                data = self.data_wrapper_func(data)
         self.send(message=data)
 
     def flush(self):
@@ -424,6 +440,4 @@ class Poller(object):
 
         for key in poll_dict.keys():
             return_list.append(self.registered_sockets[str(key)])
-            # if str(key) in self.registered_sockets:
-            #     return_list.append(self.registered_sockets[str(key)])
         return return_list

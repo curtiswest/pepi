@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from subprocess import check_output
-import random
+from future.utils import viewitems
 
 from picamera import PiCamera
 from picamera.array import PiRGBArray
@@ -15,49 +15,52 @@ from picamera.array import PiRGBArray
 import pepi_config
 import utils
 from communication.communication import CommunicationSocket, Poller
-from communication.pymsg import *
+from communication.pymsg import WrapperMessage, IdentityMessage, ControlMessage, DataMessage, FileLikeDataWrapper
 from stoppablethread import StoppableThread
 
 __author__ = 'Curtis West, Claudio Pizzolato'
 __copyright__ = 'Copyright 2017, Curtis West, Claudio Pizzolato'
-__version__ = '0.2'
+__version__ = '0.3'
 __maintainer__ = 'Curtis West'
 __email__ = "curtis@curtiswest.net"
 __status__ = 'Development'
 
 
 class StreamingThread(StoppableThread):
-    def __init__(self, camera_instance, identity):
+    def __init__(self, camera_instance):
         super(StreamingThread, self).__init__()
-        self.camera_instance = camera_instance
-        self.socket = CommunicationSocket(CommunicationSocket.SocketType.DEALER)
-        self.socket.identity = str(identity)
-        self.socket.connect_to('tcp://{}:{}'.format(pepi_config.CLIENT_IP, pepi_config.IDENT_PORT))
-        ident_msg = IdentityMessage(check_output(['hostname', '-I']).rstrip(), Server.get_server_id().zfill(16), is_stream=True)
-        self.socket.send(ident_msg.wrap().serialize())
 
+        # Set up socket for communication back to main comms thread
+        self.socket = CommunicationSocket(CommunicationSocket.SocketType.PAIR)
+        self.socket.connect_to('inproc://stream')
+        self.socket.data_wrapper_func = FileLikeDataWrapper.serialize_data
+        self.socket.data_wrapper_args = {'data_code': -1}
+
+        # Set up camera
+        self.camera_instance = camera_instance
         self.old_resolution = self.camera_instance.resolution
         self.old_framerate = self.camera_instance.framerate
         self.camera_instance.resolution = pepi_config.RESOLUTION_640
         self.camera_instance.framerate = 25
-        self.camera_instance.start_preview()
-        self.socket.data_wrapper_class = FileLikeDataWrapper.serialize_data  # TODO: refactor into better design
 
     def run(self):
+        # Keep recording until this thread receives a stop event
         self.camera_instance.start_recording(self.socket, format='h264', quality=20)
         while not self.is_stopped():
             time.sleep(0.1)
+
+        # Stop recording and return camera to previous setup and close socket
         self.camera_instance.stop_recording()
         self.camera_instance.framerate = self.old_framerate
         self.camera_instance.resolution = self.old_resolution
-        self.socket.close(linger=5)
+        self.socket.close()
 
 
 class Server:
     HB_MIN_INTERVAL = 3  # Seconds between heartbeats to client
     HB_MAX_INTERVAL = 15  # Seconds between heartbeats to client
     HB_HEALTH = 3  # Number of heartbeats missed before assumed dead
-    HB_BACKOFF_RATE = 1.75
+    HB_BACKOFF_RATE = 1.75  # How aggressively we back off on heartbeats (i.e. HB_INTERVAL * HB_BACKOFF_RATE)
     DATA_EXPIRY_SECONDS = 60 * 10  # How long a capture data item is guaranteed to be available on this server
 
     def exit_handler(self):
@@ -65,6 +68,7 @@ class Server:
         if self.is_streaming:
             logging.info("Exit Handler: stopping streaming..")
             self.stream_thread.stop()
+            time.sleep(0.5)
         if self.camera is not None:
             logging.info("Exit Handler: closing camera..")
             self.camera.close()
@@ -77,14 +81,15 @@ class Server:
     # noinspection PyUnusedLocal
     @staticmethod
     def signal_handler(signal_, frame):
-        logging.info('Received SIGINT, exiting..')
-        sys.exit(0)
+        # logging.info('Received SIGINT, exiting..')
+        sys.exit('Received SIGINT, exiting..')
+        time.sleep(1)
 
     @staticmethod
     def get_camera_singleton(resolution=pepi_config.RESOLUTION_MAX):
         camera = PiCamera()
         camera.resolution = resolution
-        logging.info('Camera warming up..')
+        logging.debug('Camera instance fetched..')
         return camera
 
     def get_camera_still(self):
@@ -109,29 +114,43 @@ class Server:
             f.close()
             return serial
 
-    def delete_data_item(self, with_data_code):
-        assert isinstance(with_data_code, str)
-        logging.debug('Deleting data code {} from timer'.format(with_data_code))
+    def delete_data_item(self, with_data_code, reason=''):
+        assert isinstance(with_data_code, int)
+        logging.debug('Deleting data code {}. Reason: {}'.format(with_data_code, reason))
         self.queued_data.pop(with_data_code, None)
 
     def socket_setup(self):
-        if self.is_streaming:
+        if self.is_streaming or self.stream_thread:
+            # Stop the streaming thread if it exists
             self.stream_thread.stop()
+            time.sleep(0.5)
             self.is_streaming = False
+            self.stream_thread = None
         if self.socket:
             # Socket exists, need to destroy
             self.poller.unregister(self.socket)
             self.socket.close(linger=0)
             self.socket = None
+
         self.socket = CommunicationSocket(CommunicationSocket.SocketType.DEALER)
         self.socket.identity = uuid.uuid4().hex[:8]
         logging.debug('Socket identity set to: {}'.format(self.socket.identity))
         self.socket.linger = 0
-        self.socket.receive_timeout = 1000
-        self.socket.send_timeout = 1000
-        self.socket.connect_to('tcp://{}:{}'.format(pepi_config.CLIENT_IP, pepi_config.IDENT_PORT))
+        self.socket.send_timeout = 2000
+        self.socket.receive_timeout = 2000
+
+        if not self.inproc_socket:
+            self.inproc_socket = CommunicationSocket(CommunicationSocket.SocketType.PAIR)
+            self.inproc_socket.bind_to('inproc://stream')
+            self.socket.receive_timeout = 2000
+
+        self.socket.bind_to('tcp://*:{}'.format(pepi_config.SOCKET_PORT))
         self.poller.register(self.socket, Poller.PollingType.POLLIN)
-        self.socket.send(self.ident_msg_serial)
+        self.poller.register(self.inproc_socket, Poller.PollingType.POLLIN)
+        try:
+            self.socket.send(self.ident_msg_serial)
+        except CommunicationSocket.TimeoutError:
+            pass
         self.connected_client_id = None
 
     def __init__(self):
@@ -159,6 +178,7 @@ class Server:
 
         # Setup sockets
         self.socket = None
+        self.inproc_socket = None
         self.poller = Poller()
         self.socket_setup()
 
@@ -178,30 +198,46 @@ class Server:
                     hb_interval = hb_interval * self.HB_BACKOFF_RATE
                     logging.info('Backing off on heartbeat interval. Now {}s'.format(hb_interval))
                     hb_interval = hb_interval if hb_interval < self.HB_MAX_INTERVAL else self.HB_MAX_INTERVAL
-                    if self.is_streaming:
-                        self.stream_thread.stop()
+
                     self.socket_setup()
                 else:
                     if self.connected_client_id:
                         logging.debug('Pinging {}. Liveness: {}'.format(self.connected_client_id, client_health))
-                        self.socket.send(ControlMessage(setting=False, payload={'ping': None}).wrap().serialize())
+                        try:
+                            self.socket.send(ControlMessage(setting=False, payload={'ping': None}).wrap().serialize())
+                        except CommunicationSocket.TimeoutError:
+                            pass
                     else:
                         logging.debug('No client. Sending out IdentMessage')
-                        self.socket.send(self.ident_msg_serial)
+                        try:
+                            self.socket.send(self.ident_msg_serial)
+                        except CommunicationSocket.TimeoutError:
+                            pass
                 client_health -= 1
 
             # Poll for messages
             sockets = self.poller.poll(hb_interval)  # Poll for new messages
-            if sockets:
+            if self.socket in sockets:
                 hb_interval = self.HB_MIN_INTERVAL  # Reset any backoff
                 heartbeat_at = time.time() + hb_interval  # Move next heartbeat time forward from this message
                 client_health = self.HB_HEALTH  # Reset client health, as must be alive to send this message
 
             for socket in sockets:
                 # Handle any received messages
-                data = socket.receive()
-                wrapped_msg = WrapperMessage.from_serialized_string(data)
-                self.message_router(socket=socket, message=wrapped_msg.unwrap())
+                try:
+                    data = socket.receive()
+                except CommunicationSocket.TimeoutError as e:
+                    logging.warn(e.message)
+                else:
+                    if socket == self.inproc_socket:
+                        logging.debug('Inproc message. Length: {}'.format(len(data)))
+                        try:
+                            self.socket.send(data)  # Forward through socket
+                        except CommunicationSocket.TimeoutError:
+                            pass
+                    else:
+                        wrapped_msg = WrapperMessage.from_serialized_string(data)
+                        self.message_router(socket=socket, message=wrapped_msg.unwrap())
 
     def ident_message_handler(self, message):
         logging.debug('Received an IdentityMessage: {}'.format(message))
@@ -221,16 +257,16 @@ class Server:
         if 'still' in message.payload:
             # Get stills first, as time sensitive
             reply.payload['still'] = self.next_data_code
-            reply.payload['expiry'] = self.DATA_EXPIRY_SECONDS  # TODO implement data expiry
+            reply.payload['expiry'] = self.DATA_EXPIRY_SECONDS
             img = self.get_camera_still()
-            self.queued_data[str(self.next_data_code)] = utils.encode_image(img, self.compressed_transfer,
-                                                                            self.compression_level)
+            self.queued_data[self.next_data_code] = utils.encode_image(img, self.compressed_transfer,
+                                                                       self.compression_level)
 
             logging.debug('Queued data now: {}'.format(self.queued_data.keys()))
-            data_timer = threading.Timer(self.DATA_EXPIRY_SECONDS, self.delete_data_item, [str(self.next_data_code)])
+            data_timer = threading.Timer(self.DATA_EXPIRY_SECONDS, self.delete_data_item, [self.next_data_code])
             data_timer.start()
             self.next_data_code += 1
-        for key, value in message.payload.iteritems():
+        for key, value in viewitems(message.payload):
             # Handle remaining payload
             logging.debug('Control Msg Payload: Key: {} | Value: {}'.format(key, value))
 
@@ -257,17 +293,16 @@ class Server:
                     self.camera.sharpness = value
                 reply.payload[key] = self.camera.sharpness
             elif key == 'start_stream':
-                id = random.randint(1000,9999)
-                reply.payload[key] = id
-                reply.payload['stream_socket_id'] = id
-                # TODO implement streaming with a new socket and thread - sockets aren't threadsafe
-                self.stream_thread = StreamingThread(self.camera, id)
+                reply.payload[key] = -1
+                self.stream_thread = StreamingThread(self.camera)
                 self.stream_thread.daemon = True
                 self.is_streaming = True
                 self.stream_thread.start()
             elif key == 'stop_stream':
-                self.is_streaming = False
                 self.stream_thread.stop()
+                self.is_streaming = False
+                time.sleep(0.5)
+                self.stream_thread = None
             elif key == 'awb_red':
                 pass
             elif key == 'awb_blue':
@@ -295,7 +330,10 @@ class Server:
                 logging.warn('Unknown key: {}'.format(key))
 
         if reply.payload:
-            socket.send(reply.wrap().serialize())
+            try:
+                socket.send(reply.wrap().serialize())
+            except CommunicationSocket.TimeoutError as e:
+                logging.warn(e.message)
 
     def data_message_handler(self, message):
         logging.info('Got a request for queued data item: {}'.format(message.data_code))
@@ -303,11 +341,21 @@ class Server:
         data = self.queued_data.pop(message.data_code, None)
         if data:
             reply = DataMessage(message.data_code, data_bytes=data)
-            self.socket.send(reply.wrap().serialize())
+            try:
+                self.socket.send(reply.wrap().serialize())
+            except CommunicationSocket.TimeoutError as e:
+                logging.warn(e.message)
         else:
             logging.warn('Unknown data code ({}) requested!'.format(message.data_code))
-            reply = ControlMessage(True, {'data_unavailable': message.data_code})
-            self.socket.send(reply.wrap().serialize())
+            try:
+                code = int(message.data_code)
+            except ValueError:
+                code = None
+            reply = ControlMessage(True, {'data_unavailable': code})
+            try:
+                self.socket.send(reply.wrap().serialize())
+            except CommunicationSocket.TimeoutError as e:
+                logging.warn(e.message)
         logging.debug('Remaining queued data items: {}'.format(self.queued_data.keys()))
 
     def message_router(self, socket, message):

@@ -9,11 +9,8 @@ __maintainer__ = 'Curtis West'
 __email__ = "curtis@curtiswest.net"
 __status__ = 'Development'
 
-IDENT_PORT = 11000
-CONTROL_PORT = 11001
-DATA_PORT = 11002
+SOCKET_PORT = 11000
 RESOLUTION_MAX = [2592, 1944]
 RESOLUTION_1080 = [1920, 1080]
 RESOLUTION_720 = [1296, 972]
 RESOLUTION_640 = [640, 480]
-CLIENT_IP = '10.0.0.4'

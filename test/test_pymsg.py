@@ -132,21 +132,23 @@ class TestPyMsg(unittest.TestCase):
         image = utils.generate_random_img()
         data_bytes_in = utils.encode_image(image)
 
-        self.data_message_test_helper(data_code='id')
-        self.data_message_test_helper(data_code='id', data_string='test data string')
-        self.data_message_test_helper(data_code='id', data_string='test data string', data_bytes=data_bytes_in)
-        self.data_message_test_helper(data_code='id', data_bytes=data_bytes_in)
+        self.data_message_test_helper(data_code=0)
+        self.data_message_test_helper(data_code=0, data_string='test data string')
+        self.data_message_test_helper(data_code=0, data_string='test data string', data_bytes=data_bytes_in)
+        self.data_message_test_helper(data_code=0, data_bytes=data_bytes_in)
 
-        with self.assertRaises(ValueError):
-            self.data_message_test_helper(data_code='')
         with self.assertRaises(TypeError):
-            self.data_message_test_helper(data_code='id', data_string=None)
+            self.data_message_test_helper(data_code=None)
         with self.assertRaises(TypeError):
-            self.data_message_test_helper(data_code='id', data_bytes=None)
-        with self.assertRaises(ValueError):
-            self.data_message_test_helper(data_code='', data_string=[123])
+            self.data_message_test_helper(data_code=10.1)
         with self.assertRaises(TypeError):
-            self.data_message_test_helper(data_code='id', data_string=['str list', '2'])
+            self.data_message_test_helper(data_code=0, data_string=None)
+        with self.assertRaises(TypeError):
+            self.data_message_test_helper(data_code=0, data_bytes=None)
+        with self.assertRaises(TypeError):
+            self.data_message_test_helper(data_code=0, data_string=[123])
+        with self.assertRaises(TypeError):
+            self.data_message_test_helper(data_code=0, data_string=['str list', '2'])
 
     def test_wrapping_messages(self):
         with self.assertRaises(pymsg.ProtobufMessageWrapper.MessageTypeError):
@@ -159,7 +161,7 @@ class TestPyMsg(unittest.TestCase):
         wrapped = control.wrap()
         self.assertEqual(wrapped.unwrap(), control)
 
-        data = pymsg.DataMessage('datacode', 'datastring')
+        data = pymsg.DataMessage(1, 'datastring')
         wrapped = data.wrap()
         self.assertEqual(wrapped.unwrap(), data)
 
@@ -180,9 +182,9 @@ class TestPyMsg(unittest.TestCase):
             abstract.protobuf()
 
     def test_wrapper_message_timing(self):
-        # ident = pymsg.IdentityMessage('10.0.0.5', 'myID')
-        # self.timer_test_helper(1000, ident)
+        ident = pymsg.IdentityMessage('10.0.0.5', 'myID')
+        timer_test_helper(1000, ident)
         control = pymsg.ControlMessage(setting=True, payload={'iso': 1000})
         timer_test_helper(10000, control)
-        # data = pymsg.DataMessage('my data code', 'my data string', 'my data bytes')
-        # self.timer_test_helper(1000, data)
+        data = pymsg.DataMessage(1, 'my data string', 'my data bytes')
+        timer_test_helper(1000, data)

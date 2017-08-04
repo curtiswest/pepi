@@ -7,7 +7,7 @@ message IdentityMessage {
 }
 
 message DataMessage {
-    string data_code = 1;
+    int32 data_code = 1;
     string data_string = 2;
     bytes data_bytes = 3;
 }

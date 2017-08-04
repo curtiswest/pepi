@@ -3,12 +3,14 @@ Pymsg.py: Provides the ProtobufMessageWrapper abstract class to wrap around Goog
 along with concrete implementations for the messages used for the Pepi system.
 """
 from abc import ABCMeta, abstractmethod
+from future.utils import viewitems
 import google.protobuf.message
+
 import pepimessage_pb2 as ppmsg
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
-__version__ = '0.1'
+__version__ = '0.2'
 __maintainer__ = 'Curtis West'
 __email__ = "curtis@curtiswest.net"
 __status__ = 'Development'
@@ -56,6 +58,7 @@ class ProtobufMessageWrapper(object):
         pass
 
     def serialize(self):
+        # type: () -> str
         """
         Serialises this message's Protobuf for transmission over a wire.
         Returns:
@@ -70,6 +73,7 @@ class ProtobufMessageWrapper(object):
         Returns:
             WrapperMessage: this message wrapped
         """
+        # noinspection PyCallByClass
         return WrapperMessage.wrap(self)
 
 
@@ -90,6 +94,7 @@ class WrapperMessage(ProtobufMessageWrapper):
         if not isinstance(protobuf, ppmsg.WrapperMessage):
             raise ProtobufMessageWrapper.MessageTypeError('WrapperMessage can only work on WrapperMessage protobufs.'
                                                           'Given a protobuf of type: {}'.format(type(protobuf)))
+        super(WrapperMessage, self).__init__()
         self.pb = protobuf
 
     def protobuf(self):
@@ -133,6 +138,7 @@ class WrapperMessage(ProtobufMessageWrapper):
                                       'field. Specifically, unwrap() cannot handle the field ({}).'.format(set_msg))
         return msg
 
+    # noinspection PyMethodOverriding
     @classmethod
     def wrap(cls, message):
         # type: (ProtobufMessageWrapper) -> WrapperMessage
@@ -155,7 +161,7 @@ class WrapperMessage(ProtobufMessageWrapper):
                     except AttributeError:
                         # Might be a dictionary type
                         pb_dict = getattr(protobuf, descriptor.name)
-                        for key, value in pb_dict.iteritems():
+                        for key, value in viewitems(pb_dict):
                             getattr(destination, descriptor.name)[key] = value
                 else:
                     setattr(destination, descriptor.name, getattr(protobuf, descriptor.name))
@@ -210,6 +216,7 @@ class IdentityMessage(ProtobufMessageWrapper):
             raise ValueError('IP cannot be None nor empty')
         if identifier is None or identifier == '':
             raise ValueError('Identifier cannot be None nor empty')
+        super(IdentityMessage, self).__init__()
         self.ip = ip
         self.identifier = identifier
         self.is_stream = bool(is_stream)
@@ -245,7 +252,7 @@ class ControlMessage(ProtobufMessageWrapper):
             if any(not isinstance(x, (int, float)) and x is not None for x in value.values()):
                 raise TypeError('All values must be int, floats or None')
             cleaned_dict = dict()
-            for key, value_ in value.iteritems():
+            for key, value_ in viewitems(value):
                 cleaned_dict[key.strip().lower()] = value_
             if self._payload:
                 self._payload.update(cleaned_dict)
@@ -264,10 +271,10 @@ class ControlMessage(ProtobufMessageWrapper):
         Raises:
             TypeError: when command is not an int, or values are of mixed type
         """
+        super(ControlMessage, self).__init__()
         self._payload = None
         self.setting = setting
         self.payload = payload
-
 
     def protobuf(self):
         """
@@ -278,10 +285,8 @@ class ControlMessage(ProtobufMessageWrapper):
         pb = ppmsg.ControlMessage()
         pb.setting = self.setting
 
-        pb_dict = dict()
-
         if self.payload is not None:
-            for key, value in self.payload.iteritems():
+            for key, value in viewitems(self.payload):
                 pb.payload[key] = value if value is not None and self.setting else 0.0
         return pb
 
@@ -302,20 +307,21 @@ class DataMessage(ProtobufMessageWrapper):
         """
         Initialises a DataMessage with the given parameters.
         Args:
-            data_code (str): the code/ID associated with the message
+            data_code (int): the code/ID associated with the message
             data_string (str): a string holding some data
             data_bytes (str or bytearray): a bytes string holding some data
             info (dict): key-value pairs of request or reply info
         """
-        if not isinstance(data_code, (str, unicode)):
-            raise TypeError('Data_code must be a string. Got instead: {}'.format(type(data_code)))
+        if not isinstance(data_code, int):
+            raise TypeError('Data_code must be an int. Got instead: {}'.format(type(data_code)))
         if data_code == '':
             raise ValueError('Data_code must be a non-empty string')
         if not isinstance(data_string, (str, unicode)):
             raise TypeError('Data_string must be a string')
         if not isinstance(data_bytes, (str, unicode, bytearray)):
             raise TypeError('Data_bytes must be a string or bytearray')
-        self.data_code = str(data_code)
+        super(DataMessage, self).__init__()
+        self.data_code = data_code
         self.data_string = str(data_string)
         self.data_bytes = str(data_bytes)
         self.info = info
@@ -348,6 +354,7 @@ class InprocMessage(ProtobufMessageWrapper):
             msg_req (str): the request associated with the message
             server_id (str): the server requesting the message (an ID)
         """
+        super(InprocMessage, self).__init__()
         self.msg_req = '' if msg_req is None else msg_req
         self.server_id = '' if server_id is None else server_id
 
@@ -363,8 +370,11 @@ class InprocMessage(ProtobufMessageWrapper):
         return pb
 
 
+# noinspection PyClassHasNoInit
 class FileLikeDataWrapper:
     @staticmethod
-    def serialize_data(data_code, data_bytes):
-        msg = DataMessage(data_code, data_bytes=data_bytes)
-        return msg.wrap().serialize()
+    def serialize_data(data, **kwargs):
+        if 'data_code' in kwargs:
+            return DataMessage(kwargs['data_code'], data_bytes=data).wrap().serialize()
+        else:
+            print('Required data_code argument for wrapper class not given')
