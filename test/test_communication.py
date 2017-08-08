@@ -2,7 +2,7 @@ import unittest
 import zmq
 from communication.communication import CommunicationSocket, Poller
 from random import randint
-from utils import in_out
+from utils.utils import in_out
 import communication.pymsg
 
 class TestCommunicationLibrary(unittest.TestCase):
@@ -20,17 +20,17 @@ class TestCommunicationLibrary(unittest.TestCase):
         with self.assertRaises(ValueError):
             _ = CommunicationSocket(123)
 
-        socket = CommunicationSocket(CommunicationSocket.SocketType.SERVER).close()
-        socket = CommunicationSocket(CommunicationSocket.SocketType.REPLY).close()
-        socket = CommunicationSocket(CommunicationSocket.SocketType.CLIENT).close()
-        socket = CommunicationSocket(CommunicationSocket.SocketType.REQUEST).close()
-        socket = CommunicationSocket(CommunicationSocket.SocketType.PUBLISHER).close()
-        socket = CommunicationSocket(CommunicationSocket.SocketType.SUBSCRIBER).close()
-        socket = CommunicationSocket(CommunicationSocket.SocketType.ROUTER).close()
-        socket = CommunicationSocket(CommunicationSocket.SocketType.DEALER).close()
-        socket = CommunicationSocket(CommunicationSocket.SocketType.PUSH).close()
-        socket = CommunicationSocket(CommunicationSocket.SocketType.PULL).close()
-        socket = CommunicationSocket(CommunicationSocket.SocketType.PAIR).close()
+        CommunicationSocket(CommunicationSocket.SocketType.SERVER).close()
+        CommunicationSocket(CommunicationSocket.SocketType.REPLY).close()
+        CommunicationSocket(CommunicationSocket.SocketType.CLIENT).close()
+        CommunicationSocket(CommunicationSocket.SocketType.REQUEST).close()
+        CommunicationSocket(CommunicationSocket.SocketType.PUBLISHER).close()
+        CommunicationSocket(CommunicationSocket.SocketType.SUBSCRIBER).close()
+        CommunicationSocket(CommunicationSocket.SocketType.ROUTER).close()
+        CommunicationSocket(CommunicationSocket.SocketType.DEALER).close()
+        CommunicationSocket(CommunicationSocket.SocketType.PUSH).close()
+        CommunicationSocket(CommunicationSocket.SocketType.PULL).close()
+        CommunicationSocket(CommunicationSocket.SocketType.PAIR).close()
 
     def test_connect_disconnect(self):
         socket = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)

@@ -9,7 +9,7 @@ import logging
 import uuid
 import zmq
 
-import utils
+import utils.utils
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
@@ -406,7 +406,7 @@ class Poller(object):
         except TypeError:
             raise TypeError('Cannot convert polling_type to int, is of type: {}'.format(type(polling_type)))
 
-        if polling_type not in utils.variables_in_class(Poller.PollingType).values():
+        if polling_type not in utils.utils.variables_in_class(Poller.PollingType).values():
             raise ValueError('Given polling_type ({}) is not valid'.format(polling_type))
         self.registered_sockets[str(comm_socket._socket)] = comm_socket
         return self._poller.register(comm_socket._socket, polling_type)

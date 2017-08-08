@@ -2,7 +2,7 @@ import time
 import unittest
 
 import communication.pepimessage_pb2 as ppmsg
-import utils
+import utils.utils as utils
 from communication import pymsg
 
 
@@ -19,7 +19,7 @@ def timer_test_helper(runs, message):
         from_serial = pymsg.WrapperMessage.from_serialized_string(serial)
         _ = from_serial.unwrap()
     delta = time.time() - start
-    print '{} {} messages took {} sec. Rate: {} sec per msg'.format(runs, type(message), delta, (delta / runs))
+    print('{} {} messages took {} sec. Rate: {} sec per msg'.format(runs, type(message), delta, (delta / runs)))
     return delta, (delta/runs)
 
 
