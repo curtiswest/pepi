@@ -1,0 +1,2 @@
+[run]
+omit = [*cv2*, *future*, *google.*, *nose2*, *numpy*, *pkg*, *zmq*]
