@@ -17,6 +17,7 @@ import utils
 from communication.communication import CommunicationSocket, Poller
 from communication.pymsg import WrapperMessage, IdentityMessage, ControlMessage, DataMessage, FileLikeDataWrapper
 from stoppablethread import StoppableThread
+from iptools import IPTools
 
 __author__ = 'Curtis West, Claudio Pizzolato'
 __copyright__ = 'Copyright 2017, Curtis West, Claudio Pizzolato'
@@ -57,8 +58,8 @@ class StreamingThread(StoppableThread):
 
 
 class Server:
-    HB_MIN_INTERVAL = 3  # Seconds between heartbeats to client
-    HB_MAX_INTERVAL = 15  # Seconds between heartbeats to client
+    HB_MIN_INTERVAL = 10  # Seconds between heartbeats to client
+    HB_MAX_INTERVAL = 30  # Seconds between heartbeats to client
     HB_HEALTH = 3  # Number of heartbeats missed before assumed dead
     HB_BACKOFF_RATE = 1.75  # How aggressively we back off on heartbeats (i.e. HB_INTERVAL * HB_BACKOFF_RATE)
     DATA_EXPIRY_SECONDS = 60 * 10  # How long a capture data item is guaranteed to be available on this server
@@ -172,7 +173,8 @@ class Server:
         self.compression_level = 90
 
         # Pre-generate our ident_msg for performance
-        self.ip = check_output(['hostname', '-I']).rstrip()  # TODO: convert to property
+        self.ip = IPTools.current_ip()
+        self.ip = self.ip[0] if self.ip else ''
         self.ident_msg = IdentityMessage(self.ip, self.server_id)
         self.ident_msg_serial = self.ident_msg.wrap().serialize()
 

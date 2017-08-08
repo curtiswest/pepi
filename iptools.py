@@ -17,12 +17,32 @@ __status__ = 'Development'
 
 class IPTools(object):
     @staticmethod
-    def get_current_ip():
-        pass
+    def current_ip():
+        candidates = []
+        gateway = None
+        for interface in netifaces.interfaces():
+            try:
+                candidates.append(netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr'])
+                gateway = IPTools.gateway_ip()
+            except (KeyError, IndexError):
+                pass
+
+        if gateway:
+            gateway_subnet = IPTools.get_subnet_from(gateway)
+            if any(c.startswith(gateway_subnet) for c in candidates):
+                candidates = (c for c in candidates if c.startswith(gateway_subnet))
+                return list(candidates)
+        else:
+            if any(not c.startswith('127') for c in candidates):
+                candidates = (c for c in candidates if not c.startswith('127')) # Remove any localhost 127.x.x.x IPs
+        return list(candidates)
 
     @staticmethod
     def gateway_ip():
-        return netifaces.gateways()['default'][netifaces.AF_INET][0]
+        try:
+            return netifaces.gateways()['default'][netifaces.AF_INET][0]
+        except (KeyError, IndexError):
+            return None
 
     @staticmethod
     def get_subnet_from(ip, with_dot=True):

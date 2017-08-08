@@ -141,14 +141,12 @@ class CommunicationThread(StoppableThread):
                 return -1
 
         def __str__(self):
-            out = ''
             if self.is_stream:
-                out.join('s')
-            if self.expiry_time:
-                out.join('"{}" exp\'s in {}s'.format(self.code, round(self.seconds_to_expiry())))
+                return's_{}'.format(self.code)
+            elif self.expiry_time:
+                return '"{}" exp\'s in {}s'.format(self.code, round(self.seconds_to_expiry()))
             else:
-                out.join(str(self.code))
-            return out
+                return str(self.code)
 
         def __repr__(self):
             return self.__str__()
@@ -179,8 +177,6 @@ class CommunicationThread(StoppableThread):
         self.player = None
         self.streaming_server_id = None
 
-        subnet = IPTools.get_subnet_from(IPTools.gateway_ip())
-
         # Setup client<->server socket
         self.socket = CommunicationSocket(CommunicationSocket.SocketType.ROUTER)
         self.socket.router_mandatory = True
@@ -195,6 +191,7 @@ class CommunicationThread(StoppableThread):
         # Connect to detected servers sockets & setup
         num_servers = 2
         num_found_servers = 0
+        subnet = IPTools.get_subnet_from(IPTools.gateway_ip())
         logging.info('Scanning for {} expected servers..'.format(num_servers))
         for ip in IPTools.check_servers(subnet=subnet, port=pc.SOCKET_PORT, timeout=10, expected_servers=num_servers):
             self.socket.connect_to('tcp://{}:{}'.format(ip, pc.SOCKET_PORT))
@@ -209,7 +206,9 @@ class CommunicationThread(StoppableThread):
 
         # Pre-generate our ident_msg for performance
         self.client_id = uuid.uuid4().hex[:8]
-        ident_msg = IdentityMessage('10.0.0.5', '{}'.format(self.client_id))  # TODO convert getting IP to method
+        ip = IPTools.current_ip()
+        ip = ip[0] if ip else ''
+        ident_msg = IdentityMessage(ip, '{}'.format(self.client_id))
         self.ident_msg_serial = ident_msg.wrap().serialize()
 
         logging.info('Client ID #{} started and waiting..'.format(self.socket.identity))
@@ -338,6 +337,21 @@ class CommunicationThread(StoppableThread):
                     self.player.kill()
                 self.socket.close()
                 self.stop()
+
+            if 'rescan' in parts:
+                try:
+                    num_servers = int(parts[parts.index('rescan')+1])
+                except (IndexError, ValueError, AttributeError):
+                    num_servers = len(self.known_servers.keys()) + 1
+                num_found_servers = 0
+                subnet = IPTools.get_subnet_from(IPTools.gateway_ip())
+
+                for ip in IPTools.check_servers(subnet=subnet, port=pc.SOCKET_PORT, timeout=10,
+                                                expected_servers=num_servers):
+                    self.socket.connect_to('tcp://{}:{}'.format(ip, pc.SOCKET_PORT))
+                    num_found_servers += 1
+                logging.info('Found {} of {} expected servers.'.format(num_found_servers, num_servers))
+
 
             # Data Message Parts
             if 'download' in parts:
@@ -489,7 +503,6 @@ class CommunicationThread(StoppableThread):
                 logging.warn('Tried to send/receive on socket, but timed out. Continuing..')
             except CommunicationSocket.MessageRoutingError:
                 logging.warn('Couldn\'t find route to send message. Possible server disconnection?')
-                # TODO handle disconnection
 
     def purge_server(self, server_id):
         self.known_servers.pop(server_id, None)

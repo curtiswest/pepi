@@ -326,7 +326,6 @@ class CommunicationSocket(object):
         self.send(message=data)
 
     def flush(self):
-        # TODO: implement
         """
         Flushes to this CommunicationSocket in a file-like manner. Not yet implemented.
         """

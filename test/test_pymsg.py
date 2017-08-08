@@ -183,8 +183,8 @@ class TestPyMsg(unittest.TestCase):
 
     def test_wrapper_message_timing(self):
         ident = pymsg.IdentityMessage('10.0.0.5', 'myID')
-        timer_test_helper(1000, ident)
+        timer_test_helper(10000, ident)
         control = pymsg.ControlMessage(setting=True, payload={'iso': 1000})
         timer_test_helper(10000, control)
         data = pymsg.DataMessage(1, 'my data string', 'my data bytes')
-        timer_test_helper(1000, data)
+        timer_test_helper(10000, data)
