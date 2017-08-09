@@ -1,15 +1,13 @@
 import unittest
 import zmq
 from communication.communication import CommunicationSocket, Poller
-from random import randint
 from utils.utils import in_out
 import communication.pymsg
 
 class TestCommunicationLibrary(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.port = randint(5000, 60000)
-        cls.port = 30001
+        cls.port = 49982
         print('Setting test port to: {}'.format(cls.port))
 
     def test_init_type_checking(self):
