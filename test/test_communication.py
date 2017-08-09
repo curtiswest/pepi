@@ -3,7 +3,7 @@ import zmq
 import time
 
 from communication.communication import CommunicationSocket, Poller
-from utils.utils import in_out
+from utils.misc import in_out
 import communication.pymsg
 from utils.iptools import IPTools
 

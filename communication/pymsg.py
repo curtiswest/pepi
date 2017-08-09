@@ -2,6 +2,8 @@
 Pymsg.py: Provides the ProtobufMessageWrapper abstract class to wrap around Google's generated Protobuf messages,
 along with concrete implementations for the messages used for the Pepi system.
 """
+import logging
+
 from abc import ABCMeta, abstractmethod
 from future.utils import viewitems
 import google.protobuf.message
@@ -15,6 +17,7 @@ __maintainer__ = 'Curtis West'
 __email__ = "curtis@curtiswest.net"
 __status__ = 'Development'
 
+logger = logging.getLogger(__name__)
 
 class ProtobufMessageWrapper(object):
     """
@@ -99,9 +102,11 @@ class WrapperMessage(ProtobufMessageWrapper):
         Throws:
             MessageTypeError: if given a protobuf that is not a WrapperMessage
         """
-        if not isinstance(protobuf, ppmsg.WrapperMessage): 
-            raise ProtobufMessageWrapper.MessageTypeError('WrapperMessage can only work on WrapperMessage protobufs.'
-                                                          'Given a protobuf of type: {}'.format(type(protobuf)))
+        if not isinstance(protobuf, ppmsg.WrapperMessage):
+            msg = 'WrapperMessage can only work on WrapperMessage protobufs.' \
+                  'Given a protobuf of type: {}'.format(type(protobuf))
+            logging.warn(msg)
+            raise ProtobufMessageWrapper.MessageTypeError(msg)
         super(WrapperMessage, self).__init__()
         self.pb = protobuf
 
@@ -115,7 +120,9 @@ class WrapperMessage(ProtobufMessageWrapper):
 
     # noinspection PyMissingOrEmptyDocstring
     def wrap(self):
-        raise NotImplementedError('A wrap message cannot itself be wrapped')
+        msg = 'A wrap message cannot itself be wrapped - tried to call wrap() on one'
+        logging.warn(msg)
+        raise NotImplementedError(msg)
 
     def unwrap(self):
         """
@@ -142,8 +149,10 @@ class WrapperMessage(ProtobufMessageWrapper):
             pb = self.pb.inproc
             msg = InprocMessage(pb.msg_req, pb.server_id)
         else: # pragma: no cover
-            raise NotImplementedError('The Protobuf that unwrap() is working on contains an unknown field in the Oneof '
-                                      'field. Specifically, unwrap() cannot handle the field ({}).'.format(set_msg))
+            msg = 'The Protobuf that unwrap() is working on contains an unknown field in the Oneof ' \
+                  'field. Specifically, unwrap() cannot handle the field ({}).'.format(set_msg)
+            logging.warn(msg)
+            raise NotImplementedError(msg)
         return msg
 
     # noinspection PyMethodOverriding
@@ -185,6 +194,8 @@ class WrapperMessage(ProtobufMessageWrapper):
             _ingest_message(pb.inproc, message)
         else: # pragma: no cover
             raise ProtobufMessageWrapper.MessageTypeError('Cannot handle message of type {}'.format(type(message)))
+
+        logging.debug('wrap() ingested protobuf as: {}'.format(pb))
         return cls(pb)
 
     @classmethod
@@ -204,7 +215,9 @@ class WrapperMessage(ProtobufMessageWrapper):
         try:
             pb.ParseFromString(string)
         except google.protobuf.message.DecodeError as e: # pragma: no cover
-            raise ProtobufMessageWrapper.DecodeError('Given string cannot be decoded. Error: {}'.format(e.message))
+            msg = 'Given string cannot be decoded. Error: {}'.format(e.message)
+            logging.warn(msg)
+            raise ProtobufMessageWrapper.DecodeError(msg)
         return cls(pb)
 
 
@@ -344,6 +357,9 @@ class DataMessage(ProtobufMessageWrapper):
         pb.data_code = self.data_code
         pb.data_string = self.data_string
         pb.data_bytes = self.data_bytes
+
+        if self.info:
+            logging.error('Info map is not yet implemented and will not be in the generated protobuf!')
 
         # TODO implement info map
         # for key, value in self.info.iteritems():

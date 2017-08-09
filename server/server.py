@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import atexit
 import logging
+import logging.config
 import signal
 import sys
 import threading
@@ -11,12 +12,15 @@ from future.utils import viewitems
 from picamera import PiCamera
 from picamera.array import PiRGBArray
 
-import utils.pepi_config as pc
-import utils.utils
+sys.path.append('../')
 from communication.communication import CommunicationSocket, Poller
 from communication.pymsg import WrapperMessage, IdentityMessage, ControlMessage, DataMessage, FileLikeDataWrapper
+
+import utils.pepi_config as pc
+import utils.misc
 from utils.stoppablethread import StoppableThread
 from utils.iptools import IPTools
+
 
 __author__ = 'Curtis West, Claudio Pizzolato'
 __copyright__ = 'Copyright 2017, Curtis West, Claudio Pizzolato'
@@ -154,8 +158,7 @@ class Server:
         self.connected_client_id = None
 
     def __init__(self):
-        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(asctime)s %(levelname)-8s: %(message)s',
-                            datefmt='%d/%m/%Y %I:%M:%S %p')
+        logging.config.fileConfig('../setup/logging_config.ini')
         atexit.register(self.exit_handler)
 
         # Setup Server variables
@@ -260,8 +263,8 @@ class Server:
             reply.payload['still'] = self.next_data_code
             reply.payload['expiry'] = self.DATA_EXPIRY_SECONDS
             img = self.get_camera_still()
-            self.queued_data[self.next_data_code] = utils.utils.encode_image(img, self.compressed_transfer,
-                                                                       self.compression_level)
+            self.queued_data[self.next_data_code] = utils.misc.encode_image(img, self.compressed_transfer,
+                                                                            self.compression_level)
 
             logging.debug('Queued data now: {}'.format(self.queued_data.keys()))
             data_timer = threading.Timer(self.DATA_EXPIRY_SECONDS, self.delete_data_item, [self.next_data_code])

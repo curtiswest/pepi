@@ -20,12 +20,13 @@ from future.utils import viewitems
 from future.builtins import input
 import cv2
 
+sys.path.append('../')
 from communication.communication import CommunicationSocket, Poller
 from communication.pymsg import WrapperMessage, IdentityMessage, ControlMessage, DataMessage, InprocMessage
 
 import utils.pepi_config as pc
+import utils.misc
 from utils.stoppablethread import StoppableThread
-import utils.utils
 from utils.iptools import IPTools
 
 __author__ = 'Curtis West'
@@ -318,7 +319,8 @@ class CommunicationThread(StoppableThread):
                             logging.warn('Couldn\'t write to player: {}'.format(e.message))
                     else:
                         if message.data_bytes:
-                            image = utils.decode_image(message.data_bytes)
+                            print('Data message length: {}'.format(len(message.data_bytes)))
+                            image = utils.misc.decode_image(message.data_bytes)
                             fname = self.image_dir + '/' + server_id + '_' + str(message.data_code)
                             cv2.imwrite('{}.png'.format(fname), image)
                             self.queued_data[server_id].remove(data_item)  # Remove the data from internal data queue
@@ -558,7 +560,7 @@ class ClientBackend(object):
         logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%%(levelname)-8s: %(message)s')
 
         # Setup local environment
-        logging.config.fileConfig('setup/logging_config.ini')
+        logging.config.fileConfig('../setup/logging_config.ini')
 
         # Spin up threads
         comm_thread = CommunicationThread()

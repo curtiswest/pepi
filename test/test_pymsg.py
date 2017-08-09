@@ -2,7 +2,7 @@ import time
 import unittest
 
 import communication.pepimessage_pb2 as ppmsg
-import utils.utils as utils
+import utils.misc as utils
 from communication import pymsg
 
 
