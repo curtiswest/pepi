@@ -3,11 +3,13 @@ import zmq
 from communication.communication import CommunicationSocket, Poller
 from utils.utils import in_out
 import communication.pymsg
+from utils.iptools import IPTools
 
 class TestCommunicationLibrary(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.port = 49982
+        cls.ip = IPTools.current_ip()[0]
         print('Setting test port to: {}'.format(cls.port))
 
     def test_init_type_checking(self):
@@ -32,14 +34,14 @@ class TestCommunicationLibrary(unittest.TestCase):
 
     def test_connect_disconnect(self):
         socket = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
-        socket.connect_to('tcp://localhost:{}'.format(self.port))
-        socket.disconnect_from('tcp://localhost:{}'.format(self.port))
+        socket.connect_to('tcp://{}:{}'.format(self.ip, self.port))
+        socket.disconnect_from('tcp://{}:{}'.format(self.ip, self.port))
         socket.close()
 
         # Socket closed, try to reconnect
-        socket.connect_to('tcp://localhost:{}'.format(self.port))
+        socket.connect_to('tcp://{}:{}'.format(self.ip, self.port))
         socket.bind_to('tcp://*:{}'.format(self.port))
-        socket.disconnect_from('tcp://localhost:{}'.format(self.port))
+        socket.disconnect_from('tcp://{}:{}'.format(self.ip, self.port))
         socket.close()
 
     def test_sockopts(self):
@@ -84,7 +86,7 @@ class TestCommunicationLibrary(unittest.TestCase):
 
     def test_send_recv_against_socket_types(self):
         request = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
-        request.connect_to('tcp://localhost:{}'.format(self.port))
+        request.connect_to('tcp://{}:{}'.format(self.ip, self.port))
 
         reply = CommunicationSocket(CommunicationSocket.SocketType.REPLY)
         reply.bind_to('tcp://*:{}'.format(self.port))
@@ -123,7 +125,7 @@ class TestCommunicationLibrary(unittest.TestCase):
 
     def test_timeout(self):
         request = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
-        request.connect_to('tcp://localhost:{}'.format(self.port))
+        request.connect_to('tcp://{}:{}'.format(self.ip, self.port))
 
         reply = CommunicationSocket(CommunicationSocket.SocketType.ROUTER)
         reply.bind_to('tcp://*:{}'.format(self.port))
@@ -139,7 +141,7 @@ class TestCommunicationLibrary(unittest.TestCase):
 
     def test_lockstep(self):
         request = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
-        request.connect_to('tcp://localhost:{}'.format(self.port))
+        request.connect_to('tcp://{}:{}'.format(self.ip, self.port))
 
         reply = CommunicationSocket(CommunicationSocket.SocketType.REPLY)
         reply.bind_to('tcp://*:{}'.format(self.port))
@@ -161,7 +163,7 @@ class TestCommunicationLibrary(unittest.TestCase):
 
     def test_req_rep(self):
         request = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
-        request.connect_to('tcp://localhost:{}'.format(self.port))
+        request.connect_to('tcp://{}:{}'.format(self.ip, self.port))
 
         reply = CommunicationSocket(CommunicationSocket.SocketType.REPLY)
         reply.bind_to('tcp://*:{}'.format(self.port))
@@ -182,7 +184,7 @@ class TestCommunicationLibrary(unittest.TestCase):
 
     def test_req_router(self):
         request = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
-        request.connect_to('tcp://localhost:{}'.format(self.port))
+        request.connect_to('tcp://{}:{}'.format(self.ip, self.port))
 
         router = CommunicationSocket(CommunicationSocket.SocketType.ROUTER)
         router.bind_to('tcp://*:{}'.format(self.port))
@@ -204,7 +206,7 @@ class TestCommunicationLibrary(unittest.TestCase):
 
     def test_dealer_router(self):
         dealer = CommunicationSocket(CommunicationSocket.SocketType.DEALER)
-        dealer.connect_to('tcp://localhost:{}'.format(self.port))
+        dealer.connect_to('tcp://{}:{}'.format(self.ip, self.port))
 
         router = CommunicationSocket(CommunicationSocket.SocketType.ROUTER)
         router.bind_to('tcp://*:{}'.format(self.port))
@@ -230,7 +232,7 @@ class TestCommunicationLibrary(unittest.TestCase):
         publisher.bind_to('tcp://*:{}'.format(self.port))
 
         subscriber = CommunicationSocket(CommunicationSocket.SocketType.SUBSCRIBER)
-        subscriber.connect_to('tcp://localhost:{}'.format(self.port))
+        subscriber.connect_to('tcp://{}:{}'.format(self.ip, self.port))
         subscriber.subscribe('')
 
         request = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
@@ -250,7 +252,7 @@ class TestCommunicationLibrary(unittest.TestCase):
         router = CommunicationSocket(CommunicationSocket.SocketType.ROUTER)
         router.bind_to('tcp://*:{}'.format(self.port))
         dealer = CommunicationSocket(CommunicationSocket.SocketType.DEALER)
-        dealer.connect_to('tcp://localhost:{}'.format(self.port))
+        dealer.connect_to('tcp://{}:{}'.format(self.ip, self.port))
 
         dealer.write('data')
         router.receive_multipart()
