@@ -41,7 +41,7 @@ class IPTools(object):
     def gateway_ip():
         try:
             return netifaces.gateways()['default'][netifaces.AF_INET][0]
-        except (KeyError, IndexError):
+        except (KeyError, IndexError): # pragma: no cover
             return None
 
     @staticmethod

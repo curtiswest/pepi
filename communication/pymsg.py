@@ -91,7 +91,7 @@ class WrapperMessage(ProtobufMessageWrapper):
         Throws:
             MessageTypeError: if given a protobuf that is not a WrapperMessage
         """
-        if not isinstance(protobuf, ppmsg.WrapperMessage):
+        if not isinstance(protobuf, ppmsg.WrapperMessage): 
             raise ProtobufMessageWrapper.MessageTypeError('WrapperMessage can only work on WrapperMessage protobufs.'
                                                           'Given a protobuf of type: {}'.format(type(protobuf)))
         super(WrapperMessage, self).__init__()
@@ -133,7 +133,7 @@ class WrapperMessage(ProtobufMessageWrapper):
         elif set_msg == 'inproc':
             pb = self.pb.inproc
             msg = InprocMessage(pb.msg_req, pb.server_id)
-        else:
+        else: # pragma: no cover
             raise NotImplementedError('The Protobuf that unwrap() is working on contains an unknown field in the Oneof '
                                       'field. Specifically, unwrap() cannot handle the field ({}).'.format(set_msg))
         return msg
@@ -175,7 +175,7 @@ class WrapperMessage(ProtobufMessageWrapper):
             _ingest_message(pb.data, message)
         elif isinstance(message, InprocMessage):
             _ingest_message(pb.inproc, message)
-        else:
+        else: # pragma: no cover
             raise ProtobufMessageWrapper.MessageTypeError('Cannot handle message of type {}'.format(type(message)))
         return cls(pb)
 
@@ -195,7 +195,7 @@ class WrapperMessage(ProtobufMessageWrapper):
         pb = ppmsg.WrapperMessage()
         try:
             pb.ParseFromString(string)
-        except google.protobuf.message.DecodeError as e:
+        except google.protobuf.message.DecodeError as e: # pragma: no cover
             raise ProtobufMessageWrapper.DecodeError('Given string cannot be decoded. Error: {}'.format(e.message))
         return cls(pb)
 
@@ -377,4 +377,4 @@ class FileLikeDataWrapper:
         if 'data_code' in kwargs:
             return DataMessage(kwargs['data_code'], data_bytes=data).wrap().serialize()
         else:
-            print('Required data_code argument for wrapper class not given')
+            print('Required data_code argument for wrapper class not given') # pragma: no cover

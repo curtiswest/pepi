@@ -44,6 +44,11 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+pylint.log
+coverage.xml
+sloccount.sc
+sloccount_report.sc*
+sloccount.*
 
 # Translations
 *.mo

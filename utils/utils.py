@@ -4,6 +4,7 @@ Utils.py: provides some utility methods that are commonly called.
 import time
 import uuid
 from cv2 import imdecode, imencode, IMWRITE_PNG_COMPRESSION, IMWRITE_JPEG_QUALITY
+import copy
 
 import google.protobuf
 import numpy as np
@@ -92,7 +93,7 @@ def variables_in_class(cls):
     Returns:
         dict: dictionary with key containing the variable name and value being the key variable's value
     """
-    var_dict = vars(cls)
+    var_dict = dict((vars(cls)))
     known_keys = ['__module__', '__doc__', '__init__', '__dict__']
     for key in known_keys:
         if key in var_dict:
@@ -133,19 +134,6 @@ def generate_random_img():
         list: the RGB image
     """
     return np.random.rand(1920, 1080, 3) * 255
-
-
-def tic():
-    global __start__
-    __start__ = time.time()
-
-
-def toc():
-    print '{:.10f} sec elapsed'.format(time.time() - __start__)
-
-
-def toc_seconds():
-    return time.time() - __start__
 
 
 def iterify(iterable):
