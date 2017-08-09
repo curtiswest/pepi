@@ -1,0 +1,2 @@
+-r ../requirements_common.txt
+picamera==1.13

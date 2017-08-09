@@ -1,0 +1,5 @@
+-r ../requirements_common.txt
+-r ../client/requirements.txt
+cov-core==1.15.0
+coverage==4.4.1
+nose2==0.6.5

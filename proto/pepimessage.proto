@@ -1,0 +1,32 @@
+syntax="proto3";
+
+message IdentityMessage {
+    string ip = 1;
+    string identifier = 2;
+    bool is_stream = 3;
+}
+
+message DataMessage {
+    int32 data_code = 1;
+    string data_string = 2;
+    bytes data_bytes = 3;
+}
+
+message ControlMessage {
+    bool setting = 1; // True if this a 'set' command, false if 'get' command
+    map<string, float> payload = 2;
+}
+
+message WrapperMessage {
+    oneof msg {
+        IdentityMessage ident = 1;
+        DataMessage data = 2;
+        ControlMessage control = 3;
+        InprocMessage inproc = 4;
+    }
+}
+
+message InprocMessage {
+    string msg_req = 1;
+    string server_id = 2;
+}
