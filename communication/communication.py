@@ -70,7 +70,7 @@ class CommunicationSocket(object):
     def linger(self, value):
         self._socket.linger = value
 
-    class SocketType:
+    class SocketType(object):
         """
             Indicates the type of CommunicationSocket this instance is and therefore which messages are associated
             with the send() and receive() functions.
@@ -87,17 +87,31 @@ class CommunicationSocket(object):
         PULL = zmq.PULL
         PAIR = zmq.PAIR
 
-    # noinspection PyMissingOrEmptyDocstring
     class SocketTypeError(Exception):
+        """
+        Indicates that the socket is of the wrong type to perform the requested operation.
+        """
         pass
 
     class MessageRoutingError(Exception):
+        """
+        Indicates that the message could not be routed to the specified destination.
+        """
         pass
 
     class TimeoutError(Exception):
+        """
+        Indicates that the communication operation requested has timed out.
+        """
         pass
 
     class StateError(Exception):
+        """
+        Indicates that this communication socket is in the incorrect state to perform the requested operation.
+
+        For example, a REQUEST socket that has sent a message already cannot send a second until it receives a reply.
+        Attempting to do so may raise a StateError.
+        """
         pass
 
     def __init__(self, socket_type):
@@ -377,11 +391,14 @@ class Poller(object):
     """
 
     # noinspection PyClassHasNoInit,PyMissingOrEmptyDocstring
-    class PollingType:
-        NONE = 0
-        POLLIN = zmq.POLLIN
-        POLLOUT = zmq.POLLOUT
-        POLLINOUT = zmq.POLLIN | zmq.POLLOUT
+    class PollingType(object):
+        """
+        Valid polling types to respond to.
+        """
+        NONE = 0  # No events
+        POLLIN = zmq.POLLIN  # Inbound message events
+        POLLOUT = zmq.POLLOUT  # Outbound message events
+        POLLINOUT = zmq.POLLIN | zmq.POLLOUT  # Both inbound and outbound message events
 
     def __init__(self):
         self._poller = zmq.Poller()

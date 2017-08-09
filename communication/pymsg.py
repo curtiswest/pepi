@@ -22,16 +22,24 @@ class ProtobufMessageWrapper(object):
     """
     __metaclass__ = ABCMeta
 
-    # noinspection PyMissingOrEmptyDocstring
     class DecodeError(Exception):
+        """
+        Indicates that the given serial string could not be decoded into its backing Protobuf.
+        """
         pass
 
-    # noinspection PyMissingOrEmptyDocstring
     class EncodeError(Exception):
+        """
+        Indicates that the given message cannot be encoded into the backing Protobuf, probably because of a type
+        mis-match between the object and the Protobuf message declaration (.proto).
+        """
         pass
 
-    # noinspection PyMissingOrEmptyDocstring
     class MessageTypeError(Exception):
+        """
+        Indicates that an operation was being performed on unsupported message type (e.g. trying to unwrap a message
+        that has not been implemented in the unwrapping method)
+        """
         pass
 
     @abstractmethod
@@ -370,10 +378,27 @@ class InprocMessage(ProtobufMessageWrapper):
         return pb
 
 
-# noinspection PyClassHasNoInit
-class FileLikeDataWrapper:
+class FileLikeDataWrapper(object):
+    """
+    Connects a method expecting a file-like object (write, flush, etc) to this PyMsg class by passing the file's data
+    into a wrapped and serialized DataMessage.
+    """
+    def __init__(self):
+        super(FileLikeDataWrapper, self).__init__()
+        pass
+
     @staticmethod
     def serialize_data(data, **kwargs):
+        """
+        Serialized the given data into a DataMessage. Expects a 'data_code' key in the kwargs to generate the
+        DataMessage.
+        Args:
+            data: the data to wrap
+            **kwargs: key-value pair arguments to be passed by the file injection point
+
+        Returns:
+
+        """
         if 'data_code' in kwargs:
             return DataMessage(kwargs['data_code'], data_bytes=data).wrap().serialize()
         else:

@@ -15,7 +15,11 @@ __maintainer__ ='Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'
 
+
 class IPTools(object):
+    """
+    Static methods that work on IP-based connections, such as getting current IP, gateway IP, etc.
+    """
     @staticmethod
     def current_ip():
         candidates = []

@@ -1,3 +1,6 @@
+"""
+Stoppablethread.py: Threads that can be called upon to stop (as long as they obey the stop command).
+"""
 from threading import Thread, Event
 
 __author__ = 'Curtis West'
