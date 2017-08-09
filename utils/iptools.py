@@ -28,7 +28,7 @@ class IPTools(object):
                 pass
 
         if gateway:
-            gateway_subnet = IPTools.get_subnet_from(gateway)
+            gateway_subnet = IPTools.get_first_digits_from(gateway, 1)
             if any(c.startswith(gateway_subnet) for c in candidates):
                 candidates = (c for c in candidates if c.startswith(gateway_subnet))
                 return list(candidates)
@@ -43,6 +43,10 @@ class IPTools(object):
             return netifaces.gateways()['default'][netifaces.AF_INET][0]
         except (KeyError, IndexError):
             return None
+
+    @staticmethod
+    def get_first_digits_from(ip, num_digits, with_dot=True):
+        return ".".join(ip.split('.')[0:num_digits]) + ('.' if with_dot else '')
 
     @staticmethod
     def get_subnet_from(ip, with_dot=True):
