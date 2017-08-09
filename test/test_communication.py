@@ -1,5 +1,7 @@
 import unittest
 import zmq
+import time
+
 from communication.communication import CommunicationSocket, Poller
 from utils.utils import in_out
 import communication.pymsg
@@ -12,6 +14,13 @@ class TestCommunicationLibrary(unittest.TestCase):
         cls.ip = IPTools.current_ip()[0]
         print('Setting test port to: {}'.format(cls.port))
 
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        # Allow time for ZMQ sockets to release in background threads (can cause test failure without)
+        time.sleep(0.5)
+
     def test_init_type_checking(self):
         with self.assertRaises(TypeError):
             _ = CommunicationSocket('hello')
@@ -20,29 +29,29 @@ class TestCommunicationLibrary(unittest.TestCase):
         with self.assertRaises(ValueError):
             _ = CommunicationSocket(123)
 
-        CommunicationSocket(CommunicationSocket.SocketType.SERVER).close()
-        CommunicationSocket(CommunicationSocket.SocketType.REPLY).close()
-        CommunicationSocket(CommunicationSocket.SocketType.CLIENT).close()
-        CommunicationSocket(CommunicationSocket.SocketType.REQUEST).close()
-        CommunicationSocket(CommunicationSocket.SocketType.PUBLISHER).close()
-        CommunicationSocket(CommunicationSocket.SocketType.SUBSCRIBER).close()
-        CommunicationSocket(CommunicationSocket.SocketType.ROUTER).close()
-        CommunicationSocket(CommunicationSocket.SocketType.DEALER).close()
-        CommunicationSocket(CommunicationSocket.SocketType.PUSH).close()
-        CommunicationSocket(CommunicationSocket.SocketType.PULL).close()
-        CommunicationSocket(CommunicationSocket.SocketType.PAIR).close()
+        CommunicationSocket(CommunicationSocket.SocketType.SERVER).close(linger=0)
+        CommunicationSocket(CommunicationSocket.SocketType.REPLY).close(linger=0)
+        CommunicationSocket(CommunicationSocket.SocketType.CLIENT).close(linger=0)
+        CommunicationSocket(CommunicationSocket.SocketType.REQUEST).close(linger=0)
+        CommunicationSocket(CommunicationSocket.SocketType.PUBLISHER).close(linger=0)
+        CommunicationSocket(CommunicationSocket.SocketType.SUBSCRIBER).close(linger=0)
+        CommunicationSocket(CommunicationSocket.SocketType.ROUTER).close(linger=0)
+        CommunicationSocket(CommunicationSocket.SocketType.DEALER).close(linger=0)
+        CommunicationSocket(CommunicationSocket.SocketType.PUSH).close(linger=0)
+        CommunicationSocket(CommunicationSocket.SocketType.PULL).close(linger=0)
+        CommunicationSocket(CommunicationSocket.SocketType.PAIR).close(linger=0)
 
     def test_connect_disconnect(self):
         socket = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
         socket.connect_to('tcp://{}:{}'.format(self.ip, self.port))
         socket.disconnect_from('tcp://{}:{}'.format(self.ip, self.port))
-        socket.close()
+        socket.close(linger=0)
 
-        # Socket closed, try to reconnect
+        # Socket close(linger=0) try to reconnect
         socket.connect_to('tcp://{}:{}'.format(self.ip, self.port))
         socket.bind_to('tcp://*:{}'.format(self.port))
         socket.disconnect_from('tcp://{}:{}'.format(self.ip, self.port))
-        socket.close()
+        socket.close(linger=0)
 
     def test_sockopts(self):
         socket = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
@@ -103,7 +112,7 @@ class TestCommunicationLibrary(unittest.TestCase):
         self.assertEqual('test', message)
         reply.send('reply')
         request.receive()
-        reply.close()
+        reply.close(linger=0)
 
         router = CommunicationSocket(CommunicationSocket.SocketType.ROUTER)
         router.bind_to('tcp://*:{}'.format(self.port))
@@ -120,8 +129,8 @@ class TestCommunicationLibrary(unittest.TestCase):
         with self.assertRaises(CommunicationSocket.MessageRoutingError):
             router.send_multipart(identity='invalid_id', message='test')
 
-        router.close()
-        request.close()
+        router.close(linger=0)
+        request.close(linger=0)
 
     def test_timeout(self):
         request = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
@@ -179,8 +188,8 @@ class TestCommunicationLibrary(unittest.TestCase):
         req_msg = request.receive()
         self.assertEqual(msg_out, req_msg, 'Message malformed during Reply->Request transport')
 
-        request.close()
-        reply.close()
+        request.close(linger=0)
+        reply.close(linger=0)
 
     def test_req_router(self):
         request = CommunicationSocket(CommunicationSocket.SocketType.REQUEST)
@@ -201,8 +210,8 @@ class TestCommunicationLibrary(unittest.TestCase):
         rep_msg = request.receive()
         self.assertEqual(rep_msg, msg_out, 'Message malformed during Router->Req transport')
 
-        request.close()
-        router.close()
+        request.close(linger=0)
+        router.close(linger=0)
 
     def test_dealer_router(self):
         dealer = CommunicationSocket(CommunicationSocket.SocketType.DEALER)
@@ -224,8 +233,8 @@ class TestCommunicationLibrary(unittest.TestCase):
         self.assertEqual(dealer_msg, msg_out, 'Message malformed during Router->Dealer transport' +
                          in_out(dealer_msg, msg_out))
 
-        router.close()
-        dealer.close()
+        router.close(linger=0)
+        dealer.close(linger=0)
 
     def test_pub_sub(self):
         publisher = CommunicationSocket(CommunicationSocket.SocketType.PUBLISHER)
