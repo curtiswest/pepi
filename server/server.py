@@ -246,10 +246,10 @@ class Server:
     def ident_message_handler(self, message):
         logging.debug('Received an IdentityMessage: {}'.format(message))
         if not self.connected_client_id:
-            logging.debug('Got client {} for the first time'.format(message.identifier))
+            logging.info('Got client {} for the first time'.format(message.identifier))
             self.connected_client_id = message.identifier
         elif self.connected_client_id != message.identifier:
-            logging.debug('Got a new client unexpectedly. Client: {}. Resetting sockets..'.format(message.identifier))
+            logging.info('Got a new client unexpectedly. Client: {}. Resetting sockets..'.format(message.identifier))
             self.socket_setup()
         else:
             logging.debug('Got ident from same old client {}'.format(message.identifier))

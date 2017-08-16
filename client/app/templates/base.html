@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <meta name="description" content="Control of PEPI tool">
+        <meta name="author" content="Curtis West">
+
+        {% if title %}
+            <title>{{ title }} - PEPI</title>
+        {% else %}
+            <title>PEPI</title>
+        {% endif %}
+
+        <!-- Bootstrap CSS -->
+        <link href="/static/css/bootstrap-responsive.min.css" rel="stylesheet">
+        <!-- Custom CSS -->
+        <link href="/static/css/base_css.css" rel="stylesheet">
+    </head>
+
+    <body>
+        <div class="container">
+            <nav class="navbar navbar-default">
+                <!-- Navbar setup with Jinja templating support -->
+                {% set navigation_bar = [
+                ('/setup', 'setup', 'Setup'),
+                ] -%}
+                {% set active_page = active_page|default('index') -%}
+
+                <!-- Define the actual navbar -->
+                <div class="container">
+                    <ul class="nav navbar-nav navbar-static-top">
+                        <a class="navbar-brand" href="/">PEPI</a>
+                        {% for href, id, caption in navigation_bar %}
+                        <li{% if id == active_page %} class="active"{% endif %}>
+                        <a href="{{ href|e }}">{{ caption|e }}</a>
+                        </li>{% endfor %}
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Rest of the page below the navbar -->
+
+            <div class="container-fluid">
+                <div class="row">
+                <!-- Show any flashed messages -->
+                {% with messages = get_flashed_messages(with_categories=True) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissable" role="alert">
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                    <span aria-hidden="True">&times;</span>
+                                </button>
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                </div>
+                <div class="row">
+                    {% block center_page %}{% endblock%}
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Bootstrap core JavaScript
+        ================================================== -->
+        <!-- Placed at the end of the document so the pages load faster -->
+        <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+        <script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+    </body>
+</html>

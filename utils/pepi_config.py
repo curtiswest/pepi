@@ -10,6 +10,7 @@ __email__ = "curtis@curtiswest.net" # pragma: no cover
 __status__ = 'Development' # pragma: no cover
 
 SOCKET_PORT = 11000 # pragma: no cover
+UI_PORT = 11001
 RESOLUTION_MAX = [2592, 1944] # pragma: no cover
 RESOLUTION_1080 = [1920, 1080] # pragma: no cover
 RESOLUTION_720 = [1296, 972] # pragma: no cover

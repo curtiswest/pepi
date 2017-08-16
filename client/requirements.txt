@@ -1,1 +1,2 @@
 -r ../requirements_common.txt
+Flask>=0.12,<0.13

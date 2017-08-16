@@ -29,4 +29,5 @@ message WrapperMessage {
 message InprocMessage {
     string msg_req = 1;
     string server_id = 2;
+    string json_payload = 3;
 }

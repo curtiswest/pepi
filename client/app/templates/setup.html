@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% set active_page = "setup" %}
+
+{% block center_page %}
+
+<style>
+    h3, h5, h6{
+        text-align: center;
+        padding: 0;
+    }
+</style>
+
+<!-- Left sidebar panel -->
+<div class="col-md-4 row-height">
+    <!-- Top panel for server discovery/setup-->
+    <div class="panel panel-default">
+        <div class="panel-heading"><h3>Server Discovery</h3></div>
+        <div class="panel-body">
+            <!-- Panel Content -->
+            <form method="post">
+                <div class="input-group">
+                    <span class="input-group-addon"><i class="glyphicon glyphicon-camera"></i> Expected</span>
+                    <input id="expected" type="number" class="form-control" name="expected" placeholder={{ servers|count }}>
+                </div>
+                <br>
+                <div class="input-group">
+                    <span class="input-group-addon has-feedback"><i class="glyphicon glyphicon-signal"></i> Found</span>
+                    <input id="found" type="number" class="form-control" name="found" placeholder="Found servers" value="{{ servers|count }}" readonly>
+                </div>
+                <br>
+                <div class="input-group
+                    {% if servers|selectattr("alive", "equalto", True)|list|count != servers|count %}has-error{% endif %}">
+                    <span class="input-group-addon"><i class="glyphicon glyphicon-transfer"></i> Alive</i></span>
+                    <input id="alive" type="number" class="form-control" name="email" placeholder="Alive servers" value="{{ servers|selectattr("alive", "equalto", True)|list|count }}" readonly>
+                </div>
+                <hr>
+                <button type="submit" name="scan-network" class="btn btn-default btn-block btn-md" >
+                    <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> Scan Network
+                </button>
+
+                <button type="submit" name="configure-all" class="btn btn-default btn-block btn-md">
+                    <span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Configure All
+                </button>
+
+                <button type="submit" name="open-capture-folder" class="btn btn-default btn-block btn-md">
+                    <span class="glyphicon glyphicon-folder-open" aria-hidden="true"></span> Open Capture Folder
+                </button>
+            </form>
+        </div>
+    </div>
+    <!-- Bottom panel, for controlling servers (capturing etc) -->
+    <div class="panel panel-default">
+        <div class="panel-heading"><h3>Server Control</h3></div>
+        <div class="panel-body">
+            <!-- Panel Content -->
+            <div class=row">
+                <form method="post">
+                    <button type="submit" name="capture" value="all" class="btn btn-success btn-block btn-md">
+                        <span class="glyphicon glyphicon-camera" aria-hidden="true"></span> Capture All
+                    </button>
+                    <button type="submit" name="shutdown" value="all" class="btn btn-warning btn-block btn-md">
+                        <span class="glyphicon glyphicon-off" aria-hidden="true"></span> Shutdown All
+                    </button>
+                </form>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Right main panel -->
+<div class="col-md-8 row-height">
+    <!-- Top panel, showing list of servers -->
+    <div class="panel panel-default">
+        <div class="panel-heading"><h3>Server Configuration</h3></div>
+        <div class="panel-body">
+            {% for server in servers|sort(attribute="alive", reverse=True) %}
+            <div class="row">
+                <div class="server-box">
+                    <form method="post">
+                        <h5>{{ server.id }}{% if not server.alive %} (Dead) {% endif %}</h5>
+                        <h6>IP: {{ server.ip }}</h6>
+                        {% if server.alive %}
+                            <button type="submit" name="capture" value={{ server.id }}
+                                    class="btn btn-success btn-block btn-md">
+                                <span class="glyphicon glyphicon-camera" aria-hidden="true" disabled></span> Capture
+                            </button>
+                            <button type="submit" name="stream" value={{ server.id }}
+                                    class="btn btn-danger btn-block btn-md">
+                                <span class="glyphicon glyphicon-facetime-video" aria-hidden="true"></span> Stream
+                            </button>
+                            <button type="submit" name="configure" value={{ server.id }}
+                                    class="btn btn-default btn-block btn-md">
+                                <span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Configure
+                            </button>
+                        {% else %}
+                            <button type="button" class="btn btn-static btn-block btn-md">
+                                <span class="glyphicon glyphicon-camera" aria-hidden="true" disabled></span> Capture
+                            </button>
+                            <button type="button" class="btn btn-static btn-block btn-md">
+                                <span class="glyphicon glyphicon-facetime-video" aria-hidden="true"></span> Stream
+                            </button>
+                            <button type="button" class="btn btn-static btn-block btn-md">
+                                <span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Configure
+                            </button>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
