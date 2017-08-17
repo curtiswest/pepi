@@ -10,6 +10,15 @@ sys.path.append('../')
 from communication.communication import CommunicationSocket
 from communication.pymsg import InprocMessage, WrapperMessage
 
+
+def open_images_folder():
+    folder = os.path.dirname(os.path.realpath(__file__)).split('/')
+    base_folder = '/'.join(folder[:-1])
+    images_folder = base_folder + '/images'
+    if not os.path.exists(images_folder):
+        os.makedirs(images_folder)
+    subprocess.call(["open", images_folder])
+
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/setup/', methods=['GET', 'POST'])
 def index():
@@ -22,13 +31,12 @@ def index():
     socket.send(msg.serialize())
     data = socket.receive()
     msg = WrapperMessage.from_serialized_string(data).unwrap()
-
     if isinstance(msg, InprocMessage):
         servers = msg.list_of_dicts
     else:
         servers = []
 
-    # Handle requests from the page (e.g. a scan-network button press)
+    # Handle POST requests from the page (e.g. a scan-network button press)
     if request.method == 'POST':
         for key in request.form.keys():
             if key == 'scan-network':
@@ -47,16 +55,11 @@ def index():
                 logging.debug('Configure All button pressed')
             elif key == 'open-capture-folder':
                 logging.debug('Open Capture Folder button pressed')
-                folder = os.path.dirname(os.path.realpath(__file__)).split('/')
-                base_folder = '/'.join(folder[:-1])
-                images_folder = base_folder + '/images'
-                if not os.path.exists(images_folder):
-                    os.makedirs(images_folder)
-                subprocess.call(["open", images_folder])
+                open_images_folder()
             elif key == 'capture':
                 flash('Capture command sent to server(s). Images will be downloaded into Capture Folder '
                       'when server is ready', 'success')
-                logging.debug('Capture button pressed')
+                logging.warn('Capture button pressed. Value: {}'.format(request.form[key]))
                 try:
                     msg = InprocMessage('capture {}'.format(request.form[key]))
                 except KeyError:
@@ -64,6 +67,15 @@ def index():
                 else:
                     logging.debug('Sending capture message: {}'.format(msg))  # DEBUG
                     socket.send(msg.wrap().serialize())
+            elif key =='download':
+                try:
+                    msg = InprocMessage('download {}'.format(request.form[key]))
+                except KeyError:
+                    logging.warn('Error in sending download command - no server ID given to download from')
+                else:
+                    logging.debug('Sending download message: {}'.format(msg))  # DEBUG
+                    socket.send(msg.wrap().serialize())
+                open_images_folder()
             elif key == 'stream':
                 flash('Streaming not yet implemented in UI', 'warning')
                 logging.debug('Stream button pressed for server {}'.format(request.form[key]))

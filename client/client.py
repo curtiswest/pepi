@@ -378,6 +378,13 @@ class CommunicationThread(StoppableThread):
                         elif data_item.is_stream:
                             # Can't and shouldn't download a stream data item
                             pass
+            if 'capture' in parts:
+                req_msg = ControlMessage(setting=False, payload={'still': None}).wrap().serialize()
+                for s in self.known_servers.values():
+                    # Send the control message to all complete, alive servers
+                    if s.is_complete() and s.is_alive():
+                        self.socket.send_multipart(s.socket_id, req_msg)
+
             elif 'start_stream' in parts:
                 if not self.streaming_server_id:
                     # TODO server selection
