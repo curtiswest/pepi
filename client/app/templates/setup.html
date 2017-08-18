@@ -2,16 +2,8 @@
 {% set active_page = "setup" %}
 
 {% block center_page %}
-
-<style>
-    h3, h5, h6{
-        text-align: center;
-        padding: 0;
-    }
-</style>
-
 <!-- Left sidebar panel -->
-<div class="col-md-4">
+<div class="col-sm-4">
     <!-- Top panel for server discovery/setup-->
     <div class="panel panel-default">
         <div class="panel-heading"><h3>Server Discovery</h3></div>
@@ -25,13 +17,15 @@
                 <br>
                 <div class="input-group">
                     <span class="input-group-addon has-feedback"><i class="glyphicon glyphicon-signal"></i> Found</span>
-                    <input id="found" type="number" class="form-control" name="found" placeholder="Found servers" value="{{ servers|count }}" readonly>
+                    <input id="found" type="number" class="form-control" name="found" placeholder="Found servers"
+                           value="{{ servers|count }}" readonly>
                 </div>
                 <br>
                 <div class="input-group
                     {% if servers|selectattr("alive", "equalto", True)|list|count != servers|count %}has-error{% endif %}">
                     <span class="input-group-addon"><i class="glyphicon glyphicon-transfer"></i> Alive</i></span>
-                    <input id="alive" type="number" class="form-control" name="email" placeholder="Alive servers" value="{{ servers|selectattr("alive", "equalto", True)|list|count }}" readonly>
+                    <input id="alive" type="number" class="form-control" name="email" placeholder="Alive servers"
+                           value="{{ servers|selectattr("alive", "equalto", True)|list|count }}" readonly>
                 </div>
                 <hr>
                 <button type="submit" name="scan-network" class="btn btn-default btn-block btn-md" >
@@ -71,46 +65,53 @@
 </div>
 
 <!-- Right main panel -->
-<div class="col-md-8">
+<div class="col-sm-8">
     <!-- Top panel, showing list of servers -->
     <div class="panel panel-default">
-        <div class="panel-heading"><h3>Server Configuration</h3></div>
+        <div class="panel-heading">
+            <h3>Server Configuration</h3>
+        </div>
         <div class="panel-body">
-            {% for server in servers|sort(attribute="alive", reverse=True) %}
-            <!--<div class="row">-->
+            {% for server in servers|selectattr("alive", "equalto", True) %}
+                <div class="col-sm-6">
                     <form method="post">
-                        <h5>{{ server.id }}{% if not server.alive %} (Dead) {% endif %}</h5>
-                        <h6>IP: {{ server.ip }}</h6>
-                        {% if server.alive %}
-                            <button type="submit" name="capture" value={{ server.id }}
-                                    class="btn btn-success btn-block btn-md">
-                                <span class="glyphicon glyphicon-camera" aria-hidden="true" disabled></span> Capture
-                            </button>
-                            <button type="submit" name="stream" value={{ server.id }}
-                                    class="btn btn-danger btn-block btn-md">
-                                <span class="glyphicon glyphicon-facetime-video" aria-hidden="true"></span> Stream
-                            </button>
-                            <button type="submit" name="configure" value={{ server.id }}
-                                    class="btn btn-default btn-block btn-md">
-                                <span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Configure
-                            </button>
-                        {% else %}
-                            <button type="button" class="btn btn-static btn-block btn-md">
-                                <span class="glyphicon glyphicon-camera" aria-hidden="true" disabled></span> Capture
-                            </button>
-                            <button type="button" class="btn btn-static btn-block btn-md">
-                                <span class="glyphicon glyphicon-facetime-video" aria-hidden="true"></span> Stream
-                            </button>
-                            <button type="button" class="btn btn-static btn-block btn-md">
-                                <span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Configure
-                            </button>
-                        {% endif %}
-
-                        {% if not loop.last %}
-                        <hr />
-                        {% endif %}
+                        <div class="panel panel-default">
+                            <div class="panel-heading">
+                                <h5>{{ server.id }} @ {{server.ip}}</h5>
+                            </div>
+                            <div class="panel-body">
+                                <div class="row">
+                                    <a href="/stream?ip={{ server.ip }}&server_id={{ server.id }}">
+                                    <img src="http://{{ server.ip }}:8080/?action=stream" alt="Live stream of camera server"
+                                            class="img-responsive rounded-corners"/></a>
+                                </div>
+                                <br>
+                                <div class="row no-gutter">
+                                    <div class="col-xs-4">
+                                        <button type="submit" name="capture" value={{ server.id }}
+                                        class="btn btn-success btn-block">
+                                        <span class="glyphicon glyphicon-camera" aria-hidden="true" aria-label="capture"></span>
+                                        </button>
+                                    </div>
+                                    <div class="col-xs-4">
+                                        <button type="submit" name="stream" value={{ server.id }}
+                                                class="btn btn-danger btn-block">
+                                            <span class="glyphicon glyphicon-facetime-video" aria-hidden="true"
+                                                  aria-label="stream fullscreen"></span>
+                                        </button>
+                                    </div>
+                                    <div class="col-xs-4">
+                                        <button type="submit" name="configure" value={{ server.id }}
+                                            class="btn btn-default btn-block">
+                                        <span class="glyphicon glyphicon-wrench" aria-hidden="true"
+                                              aria-label="configure camera"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </form>
-            <!--</div>-->
+                </div>
             {% endfor %}
         </div>
     </div>

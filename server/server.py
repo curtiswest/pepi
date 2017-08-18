@@ -12,10 +12,12 @@ from future.utils import viewitems
 from picamera import PiCamera
 from picamera.array import PiRGBArray
 
+
 sys.path.append('../')
 from communication.communication import CommunicationSocket, Poller
 from communication.pymsg import WrapperMessage, IdentityMessage, ControlMessage, DataMessage, FileLikeDataWrapper
 
+import stream
 import utils.pepi_config as pc
 import utils.misc
 from utils.stoppablethread import StoppableThread
@@ -28,36 +30,58 @@ __version__ = '0.3'
 __maintainer__ = 'Curtis West'
 __email__ = "curtis@curtiswest.net"
 __status__ = 'Development'
-
-
-class StreamingThread(StoppableThread):
-    def __init__(self, camera_instance):
-        super(StreamingThread, self).__init__()
-
-        # Set up socket for communication back to main comms thread
-        self.socket = CommunicationSocket(CommunicationSocket.SocketType.PAIR)
-        self.socket.connect_to('inproc://stream')
-        self.socket.data_wrapper_func = FileLikeDataWrapper.serialize_data
-        self.socket.data_wrapper_args = {'data_code': -1}
-
-        # Set up camera
-        self.camera_instance = camera_instance
-        self.old_resolution = self.camera_instance.resolution
-        self.old_framerate = self.camera_instance.framerate
-        self.camera_instance.resolution = pc.RESOLUTION_640
-        self.camera_instance.framerate = 25
-
-    def run(self):
-        # Keep recording until this thread receives a stop event
-        self.camera_instance.start_recording(self.socket, format='h264', quality=20)
-        while not self.is_stopped():
-            time.sleep(0.1)
-
-        # Stop recording and return camera to previous setup and close socket
-        self.camera_instance.stop_recording()
-        self.camera_instance.framerate = self.old_framerate
-        self.camera_instance.resolution = self.old_resolution
-        self.socket.close()
+#
+# class MJPEGStreamingThread(StoppableThread):
+#     def __init__(self, camera_instance):
+#         super(MJPEGStreamingThread, self).__init__()
+#
+#         # Set up socket for communication back to main comms thread
+#         self.socket = CommunicationSocket(CommunicationSocket.SocketType.PAIR)
+#         self.socket.connect_to('inproc://stream')
+#         self.socket.data_wrapper_func = FileLikeDataWrapper.serialize_data
+#         self.socket.data_wrapper_args = {'data_code': -1}
+#
+#         # Set up camera
+#         self.camera_instance = camera_instance
+#         self.old_resolution = self.camera_instance.resolution
+#         self.old_framerate = self.camera_instance.framerate
+#         self.camera_instance.resolution = pc.RESOLUTION_640
+#         self.camera_instance.framerate = 5
+#
+#     def run(self):
+#         self.camera_instance.start_recording(self.socket, format='mjpeg')
+#         while not self.is_stopped():
+#             time.sleep(0.1)
+#
+#
+# class StreamingThread(StoppableThread):
+#     def __init__(self, camera_instance):
+#         super(StreamingThread, self).__init__()
+#
+#         # Set up socket for communication back to main comms thread
+#         self.socket = CommunicationSocket(CommunicationSocket.SocketType.PAIR)
+#         self.socket.connect_to('inproc://stream')
+#         self.socket.data_wrapper_func = FileLikeDataWrapper.serialize_data
+#         self.socket.data_wrapper_args = {'data_code': -1}
+#
+#         # Set up camera
+#         self.camera_instance = camera_instance
+#         self.old_resolution = self.camera_instance.resolution
+#         self.old_framerate = self.camera_instance.framerate
+#         self.camera_instance.resolution = pc.RESOLUTION_640
+#         self.camera_instance.framerate = 25
+#
+#     def run(self):
+#         # Keep recording until this thread receives a stop event
+#         self.camera_instance.start_recording(self.socket, format='h264', quality=20)
+#         while not self.is_stopped():
+#             time.sleep(0.1)
+#
+#         # Stop recording and return camera to previous setup and close socket
+#         self.camera_instance.stop_recording()
+#         self.camera_instance.framerate = self.old_framerate
+#         self.camera_instance.resolution = self.old_resolution
+#         self.socket.close()
 
 
 class Server:
@@ -69,17 +93,15 @@ class Server:
 
     def exit_handler(self):
         logging.info("Exit Handler: cleaning up..")
-        if self.is_streaming:
-            logging.info("Exit Handler: stopping streaming..")
-            self.stream_thread.stop()
-            time.sleep(0.5)
-        if self.camera is not None:
+        if self.camera:
             logging.info("Exit Handler: closing camera..")
             self.camera.close()
         if self.socket:
             logging.info("Exit Handler: closing socket..")
             self.socket.close()
-
+        if self.stream:
+            logging.info("Exit Handler: killing stream..")
+            self.stream.stop()
         logging.info("Exit Handler: complete & exiting")
 
     # noinspection PyUnusedLocal
@@ -87,7 +109,6 @@ class Server:
     def signal_handler(signal_, frame):
         # logging.info('Received SIGINT, exiting..')
         sys.exit('Received SIGINT, exiting..')
-        time.sleep(1)
 
     @staticmethod
     def get_camera_singleton(resolution=pc.RESOLUTION_MAX):
@@ -96,11 +117,20 @@ class Server:
         logging.debug('Camera instance fetched..')
         return camera
 
-    def get_camera_still(self):
+    @staticmethod
+    def get_camera_still(camera):
         start_time = time.time()
-        with PiRGBArray(self.camera) as raw_capture:
-            self.camera.capture(raw_capture, format='bgr', use_video_port=False)
+        with PiRGBArray(camera) as raw_capture:
+            # Save the settings of the camera
+            old_resolution = camera.resolution
+            camera.resolution = pc.RESOLUTION_MAX
+
+            # Capture the image
+            camera.capture(raw_capture, format='bgr', use_video_port=False)
             logging.info('Capture took: {} sec'.format(time.time() - start_time))
+
+            # Restore old camera settings
+            camera.resolution = old_resolution
             return raw_capture.array
 
     @staticmethod
@@ -124,12 +154,6 @@ class Server:
         self.queued_data.pop(with_data_code, None)
 
     def socket_setup(self):
-        if self.is_streaming or self.stream_thread:
-            # Stop the streaming thread if it exists
-            self.stream_thread.stop()
-            time.sleep(0.5)
-            self.is_streaming = False
-            self.stream_thread = None
         if self.socket:
             # Socket exists, need to destroy
             self.poller.unregister(self.socket)
@@ -165,9 +189,8 @@ class Server:
         self.server_id = self.get_server_id().zfill(16)
         signal.signal(signal.SIGINT, self.signal_handler)
         logging.info('Server ID #{} starting up..'.format(self.server_id))
-        self.camera = self.get_camera_singleton()
-        self.is_streaming = False
-        self.stream_thread = None
+        self.camera = Server.get_camera_singleton()
+        self.stream = None
         self.connected_client_id = ''
         self.queued_data = dict()
         self.next_data_code = 0
@@ -185,6 +208,10 @@ class Server:
         self.inproc_socket = None
         self.poller = Poller()
         self.socket_setup()
+
+        # Setup stream thread
+        self.stream = stream.StreamLauncher(camera=self.camera)
+        self.stream.start()
 
         # Setup heartbeating
         hb_interval = self.HB_MIN_INTERVAL
@@ -262,7 +289,7 @@ class Server:
             # Get stills first, as time sensitive
             reply.payload['still'] = self.next_data_code
             reply.payload['expiry'] = self.DATA_EXPIRY_SECONDS
-            img = self.get_camera_still()
+            img = Server.get_camera_still(self.camera)
             self.queued_data[self.next_data_code] = utils.misc.encode_image(img, self.compressed_transfer,
                                                                             self.compression_level)
 
@@ -296,17 +323,18 @@ class Server:
                 if setting:
                     self.camera.sharpness = value
                 reply.payload[key] = self.camera.sharpness
-            elif key == 'start_stream':
-                reply.payload[key] = -1
-                self.stream_thread = StreamingThread(self.camera)
-                self.stream_thread.daemon = True
-                self.is_streaming = True
-                self.stream_thread.start()
-            elif key == 'stop_stream':
-                self.stream_thread.stop()
-                self.is_streaming = False
-                time.sleep(0.5)
-                self.stream_thread = None
+            # elif key == 'start_stream':
+            #     reply.payload[key] = -1
+            #     # self.stream_thread = StreamingThread(self.camera)
+            #     self.stream_thread = MJPEGStreamingThread(self.camera)
+            #     self.stream_thread.daemon = True
+            #     self.is_streaming = True
+            #     self.stream_thread.start()
+            # elif key == 'stop_stream':
+            #     self.stream_thread.stop()
+            #     self.is_streaming = False
+            #     time.sleep(0.5)
+            #     self.stream_thread = None
             elif key == 'awb_red':
                 pass
             elif key == 'awb_blue':

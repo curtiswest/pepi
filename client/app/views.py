@@ -10,7 +10,6 @@ sys.path.append('../')
 from communication.communication import CommunicationSocket
 from communication.pymsg import InprocMessage, WrapperMessage
 
-
 def open_images_folder():
     folder = os.path.dirname(os.path.realpath(__file__)).split('/')
     base_folder = '/'.join(folder[:-1])
@@ -22,19 +21,28 @@ def open_images_folder():
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/setup/', methods=['GET', 'POST'])
 def index():
-    # Connect to the ClientBackend over ipc connection
-    socket = CommunicationSocket(CommunicationSocket.SocketType.DEALER)
-    socket.connect_to('ipc://ui.pipe')
+    if not app.debug:
+        # Connect to the ClientBackend over ipc connection
+        socket = CommunicationSocket(CommunicationSocket.SocketType.DEALER)
+        socket.connect_to('ipc://ui.pipe')
 
-    # Get the status of the servers from ClientBackend for displaying
-    msg = InprocMessage(msg_req='server_status').wrap()
-    socket.send(msg.serialize())
-    data = socket.receive()
-    msg = WrapperMessage.from_serialized_string(data).unwrap()
-    if isinstance(msg, InprocMessage):
-        servers = msg.list_of_dicts
+        # Get the status of the servers from ClientBackend for displaying
+        msg = InprocMessage(msg_req='server_status').wrap()
+        socket.send(msg.serialize())
+        data = socket.receive()
+        msg = WrapperMessage.from_serialized_string(data).unwrap()
+        if isinstance(msg, InprocMessage):
+            servers = msg.list_of_dicts
+        else:
+            servers = []
     else:
-        servers = []
+        # Dummy debug data
+        servers = [
+            {'ip': '10.0.0.1', 'id': '0000ffffaaaabbbb', 'alive': True},
+            {'ip': '10.0.0.2', 'id': '0000aaaaaaaaaaaa', 'alive': True},
+            {'ip': '10.0.0.3', 'id': '0000bbbbbbbbbbbb', 'alive': False},
+            {'ip': '10.0.0.4', 'id': '0000cccccccccccc', 'alive': True}
+        ]
 
     # Handle POST requests from the page (e.g. a scan-network button press)
     if request.method == 'POST':
@@ -77,19 +85,27 @@ def index():
                     socket.send(msg.wrap().serialize())
                 open_images_folder()
             elif key == 'stream':
-                flash('Streaming not yet implemented in UI', 'warning')
-                logging.debug('Stream button pressed for server {}'.format(request.form[key]))
+                for server in servers:
+                    if request.form[key] == server['id']:
+                        return redirect(url_for('stream', server_id=server['id'], ip=server['ip']))
+                else:
+                    logging.error('Got stream button for a non-existent server?')
             elif key == 'configure':
                 flash('Configuring servers is not yet implemented in UI', 'warning')
                 logging.debug('Configure Button pressed for server {}'.format(request.form[key]))
-                return redirect(url_for('configure', server_id=request.form[key]))
+                # return redirect(url_for('configure', server_id=request.form[key]))
             elif key == 'shutdown-all':
                 flash('Shutdown All is not yet implemented in UI', 'warning')
 
     # Render the template
     return render_template('/setup.html', title='Setup', servers=servers)
 
-@app.route('/setup/<server_id>')
+@app.route('/setup')
 def configure(server_id):
-    print('Server ID is: {}'.format(server_id))  # DEBUG
-    return render_template('/setup.html', title=server_id)
+    return render_template('/setup.html')
+
+@app.route('/stream', methods=['GET'])
+def stream():
+    server_id = request.args.get('server_id')
+    ip = request.args.get('ip')
+    return render_template('/stream.html', title='Stream {}'.format(server_id), id_=server_id, ip=ip)
