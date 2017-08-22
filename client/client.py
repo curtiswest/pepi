@@ -339,14 +339,35 @@ class CommunicationThread(StoppableThread):
                     num_servers = len(self.known_servers.keys()) + 1
                 num_found_servers = 0
                 subnet = IPTools.get_subnet_from(IPTools.gateway_ip())
-
-                print('rescanning for {} servers'.format(num_servers))
-
+                expected_num_servers = num_servers - len(self.known_servers)
+                print('rescanning for {} new servers'.format(expected_num_servers))
                 for ip in IPTools.check_servers(subnet=subnet, port=pc.SOCKET_PORT, timeout=10,
-                                                expected_servers=num_servers):
+                                                expected_servers=expected_num_servers):
                     self.socket.connect_to('tcp://{}:{}'.format(ip, pc.SOCKET_PORT))
                     num_found_servers += 1
-                logging.info('Found {} of {} expected servers.'.format(num_found_servers, num_servers))
+                logging.info('Found {} new servers.'
+                             'Now have {} of {} expected servers.'.format(num_found_servers,
+                                                                         (num_found_servers + len(self.known_servers)),
+                                                                          num_servers))
+
+            if 'shutdown' in parts:
+                try:
+                    value = parts[parts.index('shutdown') + 1]
+                    if value != 'all':
+                        server = self.known_servers[value]
+                except IndexError:
+                    logging.warn('No server ID given to shutdown')
+                except KeyError:
+                    logging.warn('Invalid server ID to shutdown given: {}'.format(value))
+                else:
+                    req_msg = ControlMessage(False, payload={'shutdown': None}).wrap().serialize()
+                    if value == 'all':
+                        for s in self.known_servers.values():
+                            # Send the control message to all complete, alive servers
+                            if s.is_complete() and s.is_alive():
+                                self.socket.send_multipart(s.socket_id, req_msg)
+                    else:
+                        self.socket.send_multipart(server.socket_id, req_msg)
 
             if 'server_status' in parts:
                 reply_list = []

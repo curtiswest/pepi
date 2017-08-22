@@ -51,7 +51,7 @@ class MJPG_Streamer(object):
     def start_with_file(self, path_to_file, file_name):
         print('input file path: {}'.format(path_to_file + ' / ' + file_name))
         output_arg = '/usr/local/lib/mjpg-streamer/output_http.so -w ./www'
-        input_arg =  '/usr/local/lib/mjpg-streamer/input_file.so -f {} -r -delay 0'.format(path_to_file)
+        input_arg =  '/usr/local/lib/mjpg-streamer/input_file.so -f {} -r -delay 0.09'.format(path_to_file)
         args = ['/usr/local/bin/mjpg_streamer',
                 '-o', output_arg,
                 '-i', input_arg]

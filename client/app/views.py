@@ -94,8 +94,17 @@ def index():
                 flash('Configuring servers is not yet implemented in UI', 'warning')
                 logging.debug('Configure Button pressed for server {}'.format(request.form[key]))
                 # return redirect(url_for('configure', server_id=request.form[key]))
-            elif key == 'shutdown-all':
-                flash('Shutdown All is not yet implemented in UI', 'warning')
+            elif key == 'shutdown':
+                flash('Shutdown command sent to server(s). Servers will now shutdown', 'success')
+                logging.warn('Shutdown button pressed. Value: {}'.format(request.form[key]))
+                try:
+                    msg = InprocMessage('shutdown {}'.format(request.form[key]))
+                except KeyError:
+                    logging.warn('Error in sending shutdown command - no server ID given to shutdown')
+                else:
+                    logging.debug('Sending shutdown message: {}'.format(msg))  # DEBUG
+                    socket.send(msg.wrap().serialize())
+                # flash('Shutdown All is not yet implemented in UI', 'warning')
 
     # Render the template
     return render_template('/setup.html', title='Setup', servers=servers)

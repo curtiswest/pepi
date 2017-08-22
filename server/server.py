@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import uuid
+import subprocess
 from future.utils import viewitems
 
 from picamera import PiCamera
@@ -30,58 +31,6 @@ __version__ = '0.3'
 __maintainer__ = 'Curtis West'
 __email__ = "curtis@curtiswest.net"
 __status__ = 'Development'
-#
-# class MJPEGStreamingThread(StoppableThread):
-#     def __init__(self, camera_instance):
-#         super(MJPEGStreamingThread, self).__init__()
-#
-#         # Set up socket for communication back to main comms thread
-#         self.socket = CommunicationSocket(CommunicationSocket.SocketType.PAIR)
-#         self.socket.connect_to('inproc://stream')
-#         self.socket.data_wrapper_func = FileLikeDataWrapper.serialize_data
-#         self.socket.data_wrapper_args = {'data_code': -1}
-#
-#         # Set up camera
-#         self.camera_instance = camera_instance
-#         self.old_resolution = self.camera_instance.resolution
-#         self.old_framerate = self.camera_instance.framerate
-#         self.camera_instance.resolution = pc.RESOLUTION_640
-#         self.camera_instance.framerate = 5
-#
-#     def run(self):
-#         self.camera_instance.start_recording(self.socket, format='mjpeg')
-#         while not self.is_stopped():
-#             time.sleep(0.1)
-#
-#
-# class StreamingThread(StoppableThread):
-#     def __init__(self, camera_instance):
-#         super(StreamingThread, self).__init__()
-#
-#         # Set up socket for communication back to main comms thread
-#         self.socket = CommunicationSocket(CommunicationSocket.SocketType.PAIR)
-#         self.socket.connect_to('inproc://stream')
-#         self.socket.data_wrapper_func = FileLikeDataWrapper.serialize_data
-#         self.socket.data_wrapper_args = {'data_code': -1}
-#
-#         # Set up camera
-#         self.camera_instance = camera_instance
-#         self.old_resolution = self.camera_instance.resolution
-#         self.old_framerate = self.camera_instance.framerate
-#         self.camera_instance.resolution = pc.RESOLUTION_640
-#         self.camera_instance.framerate = 25
-#
-#     def run(self):
-#         # Keep recording until this thread receives a stop event
-#         self.camera_instance.start_recording(self.socket, format='h264', quality=20)
-#         while not self.is_stopped():
-#             time.sleep(0.1)
-#
-#         # Stop recording and return camera to previous setup and close socket
-#         self.camera_instance.stop_recording()
-#         self.camera_instance.framerate = self.old_framerate
-#         self.camera_instance.resolution = self.old_resolution
-#         self.socket.close()
 
 
 class Server:
@@ -107,7 +56,6 @@ class Server:
     # noinspection PyUnusedLocal
     @staticmethod
     def signal_handler(signal_, frame):
-        # logging.info('Received SIGINT, exiting..')
         sys.exit('Received SIGINT, exiting..')
 
     @staticmethod
@@ -186,22 +134,21 @@ class Server:
         atexit.register(self.exit_handler)
 
         # Setup Server variables
-        self.server_id = self.get_server_id().zfill(16)
+        server_id = self.get_server_id().zfill(16)
         signal.signal(signal.SIGINT, self.signal_handler)
-        logging.info('Server ID #{} starting up..'.format(self.server_id))
+        logging.info('Server ID #{} starting up..'.format(server_id))
         self.camera = Server.get_camera_singleton()
-        self.stream = None
         self.connected_client_id = ''
         self.queued_data = dict()
-        self.next_data_code = 0
+        self.next_data_code = 0 #TODO: move to itertools.count()
         self.compressed_transfer = True
         self.compression_level = 90
 
         # Pre-generate our ident_msg for performance
-        self.ip = IPTools.current_ip()
-        self.ip = self.ip[0] if self.ip else ''
-        self.ident_msg = IdentityMessage(self.ip, self.server_id)
-        self.ident_msg_serial = self.ident_msg.wrap().serialize()
+        ip = IPTools.current_ip()
+        ip = ip[0] if ip else ''
+        ident_msg = IdentityMessage(ip, server_id)
+        self.ident_msg_serial = ident_msg.wrap().serialize()
 
         # Setup sockets
         self.socket = None
@@ -223,7 +170,7 @@ class Server:
             # Handle heartbeating
             if time.time() >= heartbeat_at:
                 heartbeat_at += hb_interval  # Move next heartbeat time forward
-                if client_health <= 0:
+                if client_health <= 0 and self.connected_client_id:
                     logging.warn('Disconnected from client {} by heartbeating.'.format(self.connected_client_id))
                     client_health = self.HB_HEALTH
                     hb_interval = hb_interval * self.HB_BACKOFF_RATE
@@ -281,6 +228,10 @@ class Server:
         else:
             logging.debug('Got ident from same old client {}'.format(message.identifier))
 
+    @staticmethod
+    def shutdown():
+        subprocess.call(['sudo shutdown now'])
+
     def control_message_handler(self, socket, message):
         setting = message.setting  # Shorthand access to setting
         reply = ControlMessage(setting=True, payload={})  # Reply message that is built upon and sent at end
@@ -323,18 +274,6 @@ class Server:
                 if setting:
                     self.camera.sharpness = value
                 reply.payload[key] = self.camera.sharpness
-            # elif key == 'start_stream':
-            #     reply.payload[key] = -1
-            #     # self.stream_thread = StreamingThread(self.camera)
-            #     self.stream_thread = MJPEGStreamingThread(self.camera)
-            #     self.stream_thread.daemon = True
-            #     self.is_streaming = True
-            #     self.stream_thread.start()
-            # elif key == 'stop_stream':
-            #     self.stream_thread.stop()
-            #     self.is_streaming = False
-            #     time.sleep(0.5)
-            #     self.stream_thread = None
             elif key == 'awb_red':
                 pass
             elif key == 'awb_blue':
@@ -358,6 +297,9 @@ class Server:
                 logging.info('Got disconnected from client. Reconnecting in 5 seconds..')
                 time.sleep(5)
                 self.socket_setup()
+            elif key == 'shutdown':
+                logging.info('Shutting self down from control message')
+                self.shutdown()
             else:
                 logging.warn('Unknown key: {}'.format(key))
 
@@ -408,3 +350,6 @@ class Server:
 
 if __name__ == '__main__':
     s = Server()
+    # while True:
+    #     if not s.is_alive:
+    #         s = Server()
