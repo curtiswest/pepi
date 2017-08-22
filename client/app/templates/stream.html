@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% set active_page = "stream" %}
+
+{% block center_page %}
+<div class="col">
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <h3>Stream of Server {{ id_ }}</h3>
+        </div>
+        <div class="panel-body">
+            <img src="http://{{ ip }}:8080/?action=stream" alt="Full-screen live stream of camera server"
+                    class="img-responsive rounded-corners img-center"/>
+        </div>
+    </div>
+</div>
+{% endblock %}}

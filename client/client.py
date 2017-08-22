@@ -1,9 +1,9 @@
-#!/usr/local/opt/pyenv/shims/python
+#!/usr/bin/env python
 from __future__ import print_function
 
 """
-New_client.py: Provides the class used to run the client-side software for Pepi. Currently only works in the terminal,
-but will probably be refactored into a separate process for implementation of a GUI at a later date.
+Client.py: Provides the class used to run the client-side backend software for Pepi. Interfaces over the `comm_inproc` 
+socket with whatever, either a UI or a terminal interface.
 """
 import datetime
 import os
@@ -186,20 +186,11 @@ class CommunicationThread(StoppableThread):
         self.socket.send_timeout = 1000
 
         # Setup inter-thread socket
-        self.comm_inproc = CommunicationSocket(CommunicationSocket.SocketType.PAIR)
+        self.comm_inproc = CommunicationSocket(CommunicationSocket.SocketType.ROUTER)
+        self.comm_inproc.router_mandatory = True
         self.comm_inproc.receive_timeout = 1000
         self.comm_inproc.send_timeout = 1000
-
-        # Connect to detected servers sockets & setup
-        num_servers = 2
-        num_found_servers = 0
-        subnet = IPTools.get_subnet_from(IPTools.gateway_ip())
-        logging.info('Scanning for {} expected servers..'.format(num_servers))
-        for ip in IPTools.check_servers(subnet=subnet, port=pc.SOCKET_PORT, timeout=10, expected_servers=num_servers):
-            self.socket.connect_to('tcp://{}:{}'.format(ip, pc.SOCKET_PORT))
-            num_found_servers += 1
-        logging.info('Found {} of {} expected servers'.format(num_found_servers, num_servers))
-        self.comm_inproc.bind_to('inproc://comms')
+        self.comm_inproc.bind_to('ipc://ui.pipe')
 
         # Register Sockets with a Poller
         self.poller = Poller()
@@ -329,7 +320,7 @@ class CommunicationThread(StoppableThread):
                 else:
                     logging.error('Unexpected data item received. Data code: {}'.format(message.data_code))
 
-    def inproc_message_handler(self, message):
+    def inproc_message_handler(self, identity, message):
         assert isinstance(message, InprocMessage), 'Inproc handler get a non-InprocMessage message'
         logging.debug('Handling inproc message')
 
@@ -348,13 +339,46 @@ class CommunicationThread(StoppableThread):
                     num_servers = len(self.known_servers.keys()) + 1
                 num_found_servers = 0
                 subnet = IPTools.get_subnet_from(IPTools.gateway_ip())
-
+                expected_num_servers = num_servers - len(self.known_servers)
+                print('rescanning for {} new servers'.format(expected_num_servers))
                 for ip in IPTools.check_servers(subnet=subnet, port=pc.SOCKET_PORT, timeout=10,
-                                                expected_servers=num_servers):
+                                                expected_servers=expected_num_servers):
                     self.socket.connect_to('tcp://{}:{}'.format(ip, pc.SOCKET_PORT))
                     num_found_servers += 1
-                logging.info('Found {} of {} expected servers.'.format(num_found_servers, num_servers))
+                logging.info('Found {} new servers.'
+                             'Now have {} of {} expected servers.'.format(num_found_servers,
+                                                                         (num_found_servers + len(self.known_servers)),
+                                                                          num_servers))
 
+            if 'shutdown' in parts:
+                try:
+                    value = parts[parts.index('shutdown') + 1]
+                    if value != 'all':
+                        server = self.known_servers[value]
+                except IndexError:
+                    logging.warn('No server ID given to shutdown')
+                except KeyError:
+                    logging.warn('Invalid server ID to shutdown given: {}'.format(value))
+                else:
+                    req_msg = ControlMessage(False, payload={'shutdown': None}).wrap().serialize()
+                    if value == 'all':
+                        for s in self.known_servers.values():
+                            # Send the control message to all complete, alive servers
+                            if s.is_complete() and s.is_alive():
+                                self.socket.send_multipart(s.socket_id, req_msg)
+                    else:
+                        self.socket.send_multipart(server.socket_id, req_msg)
+
+            if 'server_status' in parts:
+                reply_list = []
+                for server_id in self.known_servers.keys():
+                    reply_list.append({
+                        'id': server_id,
+                        'ip': self.known_servers[server_id].ip,
+                        'alive': self.known_servers[server_id].is_alive()
+                    })
+                msg = InprocMessage(msg_req='server_status', list_of_dicts=reply_list)
+                self.comm_inproc.send_multipart(identity, msg.wrap().serialize())
 
             # Data Message Parts
             if 'download' in parts:
@@ -375,6 +399,13 @@ class CommunicationThread(StoppableThread):
                         elif data_item.is_stream:
                             # Can't and shouldn't download a stream data item
                             pass
+            if 'capture' in parts:
+                req_msg = ControlMessage(setting=False, payload={'still': None}).wrap().serialize()
+                for s in self.known_servers.values():
+                    # Send the control message to all complete, alive servers
+                    if s.is_complete() and s.is_alive():
+                        self.socket.send_multipart(s.socket_id, req_msg)
+
             elif 'start_stream' in parts:
                 if not self.streaming_server_id:
                     # TODO server selection
@@ -476,7 +507,7 @@ class CommunicationThread(StoppableThread):
 
         if isinstance(message, InprocMessage):
             # Message from the another thread, forward to the handler
-            self.inproc_message_handler(message=message)
+            self.inproc_message_handler(identity=identity, message=message)
         elif isinstance(message, IdentityMessage):
             # Identity messages identify the server better than below methods
             self.ident_message_handler(socket=socket, identity=identity, message=message)
@@ -513,7 +544,9 @@ class CommunicationThread(StoppableThread):
 
     def run(self):
         heartbeat_at = time.time() + self.HB_INTERVAL
-        while not self.is_stopped():
+        # while not self.is_stopped():
+        while True:
+
             if time.time() >= heartbeat_at:
                 heartbeat_at += self.HB_INTERVAL  # Move next heartbeat time forward
 
@@ -544,11 +577,9 @@ class CommunicationThread(StoppableThread):
                     self.purge_server(server_id)
 
             sockets = self.poller.poll(self.HB_INTERVAL)
+
             for socket in sockets:
-                if socket == self.comm_inproc:
-                    identity, data = None, socket.receive()
-                else:
-                    identity, data = socket.receive_multipart()
+                identity, data = socket.receive_multipart()
                 msg = WrapperMessage.from_serialized_string(data).unwrap()
                 self.server_message_router(socket, identity, msg)
         else:
@@ -557,21 +588,11 @@ class CommunicationThread(StoppableThread):
 
 class ClientBackend(object):
     def __init__(self):
-        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%%(levelname)-8s: %(message)s')
-
-        # Setup local environment
-        logging.config.fileConfig('../setup/logging_config.ini')
-
-        # Spin up threads
+        # Spin up thread
+        # TODO: could do directly instead?
         comm_thread = CommunicationThread()
         comm_thread.daemon = True
         comm_thread.start()
-        terminal_thread = TerminalThread()
-        terminal_thread.daemon = True
-        terminal_thread.start()
-
-        # Collect threads when they decide to exit
-        terminal_thread.join()
         comm_thread.join()
 
 if __name__ == '__main__':

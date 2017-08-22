@@ -3,6 +3,7 @@ Pymsg.py: Provides the ProtobufMessageWrapper abstract class to wrap around Goog
 along with concrete implementations for the messages used for the Pepi system.
 """
 import logging
+import json
 
 from abc import ABCMeta, abstractmethod
 from future.utils import viewitems
@@ -146,8 +147,9 @@ class WrapperMessage(ProtobufMessageWrapper):
             data_bytes = pb.data_bytes
             msg = DataMessage(data_code=data_code, data_string=data_string, data_bytes=data_bytes)
         elif set_msg == 'inproc':
-            pb = self.pb.inproc
-            msg = InprocMessage(pb.msg_req, pb.server_id)
+            msg = InprocMessage.from_protobuf(self.pb.inproc)
+            # pb = self.pb.inproc
+            # msg = InprocMessage(pb.msg_req, pb.server_id)
         else: # pragma: no cover
             msg = 'The Protobuf that unwrap() is working on contains an unknown field in the Oneof ' \
                   'field. Specifically, unwrap() cannot handle the field ({}).'.format(set_msg)
@@ -357,7 +359,6 @@ class DataMessage(ProtobufMessageWrapper):
         pb.data_code = self.data_code
         pb.data_string = self.data_string
         pb.data_bytes = self.data_bytes
-
         if self.info:
             logging.error('Info map is not yet implemented and will not be in the generated protobuf!')
 
@@ -371,7 +372,7 @@ class InprocMessage(ProtobufMessageWrapper):
     """
     A message between two thread (in-process message).
     """
-    def __init__(self, msg_req, server_id=''):
+    def __init__(self, msg_req, server_id='', list_of_dicts=None):
         """
         Initialises a InprocMessage with the given parameters.
         Args:
@@ -381,6 +382,7 @@ class InprocMessage(ProtobufMessageWrapper):
         super(InprocMessage, self).__init__()
         self.msg_req = '' if msg_req is None else msg_req
         self.server_id = '' if server_id is None else server_id
+        self.list_of_dicts = list_of_dicts if list_of_dicts else []
 
     def protobuf(self):
         """
@@ -391,7 +393,20 @@ class InprocMessage(ProtobufMessageWrapper):
         pb = ppmsg.InprocMessage()
         pb.msg_req = self.msg_req
         pb.server_id = self.server_id
+        pb.json_payload = json.dumps(self.list_of_dicts)
         return pb
+
+    @classmethod
+    def from_protobuf(cls, protobuf):
+        assert isinstance(protobuf, ppmsg.InprocMessage), "Must be a InprocMessage input"
+        msg_req = protobuf.msg_req
+        server_id = protobuf.server_id
+        try:
+            list_of_dicts = json.loads(protobuf.json_payload)
+        except ValueError:
+            logging.warn('JSON payload could not be decoded from string: {}'.format(protobuf.json_payload))
+            list_of_dicts = None
+        return cls(msg_req=msg_req, server_id=server_id, list_of_dicts=list_of_dicts)
 
 
 class FileLikeDataWrapper(object):
