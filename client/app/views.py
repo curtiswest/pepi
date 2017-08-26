@@ -3,13 +3,22 @@ import subprocess
 import logging
 import datetime
 
-from flask import render_template, flash, url_for, request, redirect
-from app import app
 import thriftpy
 poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
 from thriftpy.rpc import client_context
 import thriftpy.transport
 import thriftpy.thrift
+from flask import render_template, flash, url_for, request, redirect
+from app import app
+
+
+__author__ = 'Curtis West'
+__copyright__ = 'Copyright 2017, Curtis West'
+__version__ = '2.0a'
+__maintainer__ ='Curtis West'
+__email__ = 'curtis@curtiswest.net'
+__status__ = 'Development'
+
 
 def base_dir():
     """
