@@ -14,7 +14,7 @@ do
 
     #Then push to the server
     echo "Pushing to $line..."
-    rsync -rtz --perms  -e "ssh -i keys/pepi_rsa" .. pi@"$line":/home/pi/pibox_v2
+    rsync -rtz --perms  -e "ssh -i keys/pepi_rsa" .. pi@"$line":/home/pi/pibox
 
     # --exclude=../images ../keys
     #Check if successful push
@@ -24,7 +24,7 @@ do
         #Start up the server again detached from SSH session
         if [ "$arg1" == "run" ]
         then
-            ssh -i keys/pepi_rsa pi@"$line" 'nohup ~/pibox_v2/pepi.sh < /dev/null > std.out 2> std.err &' < /dev/null
+            ssh -i keys/pepi_rsa pi@"$line" 'nohup ~/pibox/pepi.sh < /dev/null > std.out 2> std.err &' < /dev/null
             echo "START: $line's server"
         fi
     else
