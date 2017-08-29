@@ -81,34 +81,37 @@ class Heartbeater(threading.Thread):
             raise ValueError('Last character in base_ip must be a dot, e.g. "192.168.1."')
         super(Heartbeater, self).__init__()
         self.daemon = True
-        self.server_dict = dict()
+        self.ip_set = set()
         self.pool = ThreadPool(50)
         self.min_interval = min_interval
         self.base_ip = base_ip
 
-    def _add_to_server_dict(self, args):
+    def _add_to_ip_set(self, args):
         # type: ((str, bool)) -> None
-        self.server_dict[args[0]] = args[1]
+        if args[1]:
+            self.ip_set.add(args[0])
+        else:
+            try:
+                self.ip_set.remove(args[0])
+            except KeyError:
+                pass
 
     @staticmethod
     def ping_server_at_ip(ip):
         # type: (str) -> (str, bool)
         try:
-            with client_context(poc_thrift.ImagingServer, ip, 6000, connect_timeout=100) as c:
-                c.ping()
+            with client_context(poc_thrift.ImagingServer, ip, 6000, connect_timeout=300) as c:
+                ping_result = c.ping()
         except thriftpy.transport.TTransportException:
             return ip, False
         else:
-            return ip, True
+            return ip, ping_result
 
     def _sweep_ips_for_servers(self, base_ip):
         # type: (str) -> None
-        self.pool.map(self._add_to_server_dict, self.ping_server_at_ip, [base_ip + str(x) for x in range(255)])
+        self.pool.map(self._add_to_ip_set, self.ping_server_at_ip, [base_ip + str(x) for x in range(255)])
         self.pool.wait_completion()
-
-    def inform_server_dead(self, server):
-        # type: (str) -> None
-        self.server_dict.pop(server, None)
+        logging.info(self.ip_set)
 
     def run(self):
         self._sweep_ips_for_servers(base_ip=self.base_ip)

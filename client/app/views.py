@@ -2,6 +2,7 @@ import os
 import subprocess
 import logging
 import datetime
+import time
 
 import thriftpy
 poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
@@ -50,6 +51,8 @@ def find_server_by(servers, id=None, ip=None):
     for server in servers:
         if server['id'] == id or server['ip'] == ip:
             return server
+    else:
+        return None
 
 def capture(all_servers, server_id):
     def _capture_single(server):
@@ -90,7 +93,6 @@ def download_images(all_servers):
                     out_file = open('{}/{}_{}.jpeg'.format(image_dir, server['id'], data_code), 'w')
                     out_file.write(image)
                     out_file.close()
-                    # TODO delete the data code after use
     print('app.server_data: {}'.format(app.server_data))
     [app.server_data[id].remove(data_code) for id, data_code in downloaded_images.viewitems()]
 
@@ -98,14 +100,15 @@ def identify_servers(servers):
     out_servers = []
     for ip in servers:
         try:
-            with client_context(poc_thrift.ImagingServer, ip, 6000, socket_timeout=100) as c:
+            with client_context(poc_thrift.ImagingServer, ip, 6000, socket_timeout=2500) as c:
                 server_dict = {'ip': ip}
                 server_dict['id'] = c.identify()
                 server_dict['stream_url'] = c.stream_url()
-                print(server_dict)
                 out_servers.append(server_dict)
         except thriftpy.transport.TTransportException as e:
-            pass
+            logging.error(e)
+        except Exception as e:
+            logging.error(e)
     return out_servers
 
 def shutdown(all_servers, server_id):
@@ -129,8 +132,7 @@ def shutdown(all_servers, server_id):
 @app.route('/setup/', methods=['GET', 'POST'])
 def index():
     # Get servers
-    server_dict = app.heartbeater.server_dict
-    servers = identify_servers({k: v for k, v in server_dict.viewitems() if v == True})
+    servers = identify_servers(app.heartbeater.ip_set.copy())
 
     # Handle POST requests from the page (e.g. a scan-network button press)
     if request.method == 'POST':
@@ -145,6 +147,7 @@ def index():
                 flash('Capture command sent to server(s). Images will be downloaded into Capture Folder '
                       'when server is ready', 'success')
                 capture(all_servers=servers, server_id=request.form[key])
+                time.sleep(1.5)  # Let the capture occur
             elif key == 'download':
                 download_images(all_servers=servers)
                 open_images_folder()
@@ -154,6 +157,9 @@ def index():
                     return redirect(url_for('stream', stream_url=server['stream_url'], server_id=server['id']))
             elif key == 'configure':
                 flash('Configuring servers is not yet implemented in UI', 'warning')
+                server = find_server_by(servers, id=request.form[key])
+                if server:
+                    return redirect(url_for('configure', server_id=server['id']))
                 pass
             elif key == 'shutdown':
                 flash('Shutdown command sent to server(s). Servers will now shutdown', 'success')
