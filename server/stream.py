@@ -26,8 +26,9 @@ def stream_from_folder(path, stream_resolution=(640, 480)):
     if path[-1:] != '/':
         path = path + '/'
 
-    last = None
+    previous_frame = None
     while True:
+        time.sleep(0.1)
         file_list = sorted(glob.glob(path + '/*.jpg'), key=os.path.getctime)
         if not file_list:
             continue
@@ -35,15 +36,17 @@ def stream_from_folder(path, stream_resolution=(640, 480)):
             continue
 
         second_newest = file_list[-2]
-        if second_newest == last:
+        if second_newest == previous_frame:
             continue
         try:
             frame = Image.open(second_newest)
-            last = second_newest
+            previous_frame = second_newest
             frame.thumbnail(stream_resolution)
             frame_buffer = BytesIO()
             frame.save(frame_buffer, 'JPEG', quality=85)
-            os.remove(second_newest)
+            older_than_newest = file_list[0:-2]
+            for frame_path in older_than_newest:
+                os.remove(frame_path)
         except IOError as e:
             time.sleep(0.1)
             # Not a JPG, or file deleted under our feet

@@ -167,7 +167,7 @@ class RaspPiImagingServer(MetaImagingServer):
 
     def shutdown(self):
         logging.info('Got shutdown command')
-        subprocess.call(['sudo shutdown now'])
+        os.system('shutdown now')
 
     def stream_url(self):
         # type: () -> str
