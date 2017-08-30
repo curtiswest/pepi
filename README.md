@@ -69,11 +69,12 @@ Coverage HTML written to dir htmlcov
 * [Google Protocol Buffers](https://developers.google.com/protocol-buffers/) - Language & platform neutral framework upon which the messaging modules are built upon, allowing future expansion to the system if other languages/platforms are desired.
 * [Picamera](https://picamera.readthedocs.io/) - Python package to access the Raspberry Pi camera modules.
 
-## Authors
+## Authors & Acknowledgements
 
 * **Claudio Pizzolato** - *Initial work and proof of concept*
-* **Curtis West** - *Further development after POC*
+* **Curtis West** - *Development from POC through to version 2.0*
+* **Griffith University** - *Supporting the project*
 
 ## License
 
-This project is not currently licensed.
+This project is licensed under Apache License 2.0. View the LICENSE file for details. 
