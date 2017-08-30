@@ -1,4 +1,4 @@
--r ../requirements_common.txt
+-r ../server/requirements.txt
 -r ../client/requirements.txt
 cov-core==1.15.0
 coverage==4.4.1

@@ -46,8 +46,12 @@ class IPTools(object):
 
     @staticmethod
     def get_first_digits_from(ip, num_digits, with_dot=True):
+        if num_digits > 4:
+           return ip
         return ".".join(ip.split('.')[0:num_digits]) + ('.' if with_dot else '')
 
     @staticmethod
     def get_subnet_from(ip, with_dot=True):
-        return ".".join(ip.split('.')[0:-1]) + ('.' if with_dot else '')
+        if len(ip.split('.')) < 4:
+            return ip if ip[-1] == '.' and with_dot else ip[0:-1]
+        return ".".join(ip.split('.')[0:3]) + ('.' if with_dot else '')

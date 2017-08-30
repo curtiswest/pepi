@@ -8,6 +8,7 @@ import threading
 import os
 import tempfile
 from io import BytesIO
+import sys
 
 import numpy as np
 from PIL import Image
@@ -15,12 +16,11 @@ import thriftpy
 
 poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
 from thriftpy.rpc import make_server
-from meta_server import MetaImager, MetaImagingServer
 from picamera import PiCamera
 from picamera.array import PiRGBArray
 
-import stream
-from iptools import IPTools
+sys.path.append('..')
+from server import MetaImager, MetaImagingServer, StreamerThread, IPTools
 
 logging.basicConfig(level=logging.INFO)
 
@@ -136,7 +136,7 @@ class RaspPiImagingServer(MetaImagingServer):
         self._stored_captures = dict()
         self.imager = imager
         self.stream_path = tempfile.mkdtemp()
-        self.streamer = stream.StreamerThread(self.stream_path)
+        self.streamer = StreamerThread(self.stream_path)
         self.streamer.start()
         self.imager.capture_to_folder(self.stream_path)
 
