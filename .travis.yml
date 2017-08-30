@@ -7,4 +7,6 @@ install:
   - "pip install -r raspi_server/requirements.txt"
   - "pip install -r client/requirements.txt"
 script:
-  - PYTHONPATH=$PWD:$PYTHONPATH py.test
+  - PYTHONPATH=$PWD:$PYTHONPATH py.test --cov=./
+after_success:
+  codecov
