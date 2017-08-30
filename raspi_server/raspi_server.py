@@ -4,19 +4,11 @@ from __future__ import print_function
 
 import logging
 import os
-import sys
 import tempfile
 from io import BytesIO
 
-import thriftpy
 from PIL import Image
-
-poc_thrift = thriftpy.load('poc.thrift', module_name='poc_thrift')
-from thriftpy.rpc import make_server
-
-sys.path.append('..')
 from server import MetaImager, MetaImagingServer, StreamerThread, IPTools
-from raspi_imager import RPiCameraImager
 
 logging.basicConfig(level=logging.INFO)
 
@@ -95,10 +87,3 @@ class RaspPiImagingServer(MetaImagingServer):
     def retrieve_still_jpg(self, with_data_code):
         # type: (str) -> str
         return self._encode_from_stored_capture_(with_data_code, 'JPEG', quality=85)
-
-
-if __name__ == '__main__':
-    handler = RaspPiImagingServer(imager=RPiCameraImager())
-    server = make_server(poc_thrift.ImagingServer, handler, '0.0.0.0', 6000)
-    print('Starting RaspPiImagingServer')
-    server.serve()
