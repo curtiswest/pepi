@@ -1,4 +1,7 @@
 # PEPI
+[![Build Status](https://travis-ci.org/curtiswest/pepi.svg?branch=apache-thrift-rewrite)](https://travis-ci.org/curtiswest/pepi)
+[![Documentation Status](https://readthedocs.org/projects/pepi/badge/?version=latest)](http://pepi.readthedocs.io/en/latest/?badge=latest)
+[![codecov](https://codecov.io/gh/curtiswest/pepi/branch/master/graph/badge.svg)](https://codecov.io/gh/curtiswest/pepi)
 
 PEPI is a Python-based system that enables remote command and control of distributed servers with a connected camera, all from a local client. PEPI is used for the purposes of acquiring stereo-photogrammetry data and seamlessly supports any number of connected servers. The current implementation consists of three broad sections:
 1. Client-side control software (including UI)
