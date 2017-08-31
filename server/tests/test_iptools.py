@@ -15,7 +15,7 @@ def test_current_ip():
 def test_gateway_ip():
     gateway_ip = IPTools.gateway_ip()
     if gateway_ip is not None:
-        assert isinstance(gateway_ip, (str, unicode))
+        assert isinstance(gateway_ip, str)
         parts = gateway_ip.split('.')
         assert len(parts) == 4
         for part in parts:

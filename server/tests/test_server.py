@@ -16,11 +16,11 @@ class MetaServerContract(object):
 
     def test_identify(self, concrete_server):
         identifier = concrete_server.identify()
-        assert isinstance(identifier, (str, unicode))
+        assert isinstance(identifier, str)
         assert len(identifier) > 0
 
     def test_stream_url(self, concrete_server):
-        assert isinstance(concrete_server.stream_url(), (str, unicode))
+        assert isinstance(concrete_server.stream_url(), str)
 
     def test_capturing_to_jpg(self, concrete_server):
         import time
@@ -29,7 +29,7 @@ class MetaServerContract(object):
         concrete_server.start_capture(data_code)
         time.sleep(1)
         jpg = concrete_server.retrieve_still_jpg(data_code)
-        assert isinstance(jpg, (str, unicode))
+        assert isinstance(jpg, (str, bytes))
         assert len(jpg) > 0
         image_bytes = BytesIO(jpg)
         image = Image.open(image_bytes)
@@ -43,7 +43,7 @@ class MetaServerContract(object):
         concrete_server.start_capture(data_code)
         time.sleep(1)
         png = concrete_server.retrieve_still_png(data_code)
-        assert isinstance(png, (str, unicode))
+        assert isinstance(png, (str, bytes))
         assert len(png) > 0
         image_bytes = BytesIO(png)
         image = Image.open(image_bytes)

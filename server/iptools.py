@@ -40,7 +40,7 @@ class IPTools(object):
     @staticmethod
     def gateway_ip():
         try:
-            return netifaces.gateways()['default'][netifaces.AF_INET][0]
+            return str(netifaces.gateways()['default'][netifaces.AF_INET][0])
         except (KeyError, IndexError):  # pragma: no cover
             return None
 
