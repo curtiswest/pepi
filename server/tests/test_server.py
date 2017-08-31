@@ -1,3 +1,5 @@
+import imghdr
+
 import pytest
 from PIL import Image
 
@@ -29,9 +31,11 @@ class MetaServerContract(object):
         concrete_server.start_capture(data_code)
         time.sleep(1)
         jpg = concrete_server.retrieve_still_jpg(data_code)
+
         assert isinstance(jpg, (str, bytes))
         assert len(jpg) > 0
         image_bytes = BytesIO(jpg)
+        assert imghdr.what(image_bytes) == 'jpeg'
         image = Image.open(image_bytes)
         assert image.size > (0, 0)
         assert image.format == 'JPEG'
@@ -46,6 +50,7 @@ class MetaServerContract(object):
         assert isinstance(png, (str, bytes))
         assert len(png) > 0
         image_bytes = BytesIO(png)
+        assert imghdr.what(image_bytes) == 'png'
         image = Image.open(image_bytes)
         assert image.size > (0, 0)
         assert image.format == 'PNG'

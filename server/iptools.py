@@ -17,14 +17,14 @@ class IPTools(object):
     """
 
     @staticmethod
-    def current_ip():
+    def current_ips():
         candidates = []
         gateway = None
         for interface in netifaces.interfaces():
             try:
                 candidates.append(netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr'])
                 gateway = IPTools.gateway_ip()
-            except (KeyError, IndexError):
+            except (KeyError, IndexError): # pragma: no cover
                 pass
 
         if gateway:

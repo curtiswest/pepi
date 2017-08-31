@@ -35,7 +35,7 @@ class RaspPiImagingServer(MetaImagingServer):
     @staticmethod
     def _current_ip():
         # type: () -> str
-        return IPTools.current_ip()[0]
+        return IPTools.current_ips()[0]
 
     def ping(self):
         # type: () -> bool
@@ -47,7 +47,7 @@ class RaspPiImagingServer(MetaImagingServer):
         # Extract serial from the "/proc/cpuinfo" file as the server ID
         try:
             f = open('/proc/cpuinfo', 'r')
-        except IOError:
+        except IOError: # pragma: no cover
             return 'ERROR00000000000'
         else:
             serial = '0000000000000000'
@@ -74,7 +74,7 @@ class RaspPiImagingServer(MetaImagingServer):
         image_buffer = BytesIO()
         try:
             image = self._stored_captures.pop(data_code)
-        except KeyError:
+        except KeyError: # pragma: no cover
             return None
         else:
             image.save(image_buffer, encoding, quality=quality)
