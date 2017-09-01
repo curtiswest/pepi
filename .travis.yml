@@ -4,8 +4,6 @@ python:
   - "3.6"
 install:
   - "pip install -r test/requirements.txt"
-  - "pip install -r raspi_server/requirements.txt"
-  - "pip install -r client/requirements.txt"
 script:
   - PYTHONPATH=$PWD:$PYTHONPATH py.test --cov=./
 after_success:

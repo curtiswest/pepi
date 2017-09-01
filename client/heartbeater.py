@@ -5,12 +5,10 @@ from __future__ import print_function
 import logging
 import time
 import threading
-import sys
-is_py2 = sys.version[0] == '2'
-if is_py2:
-    from Queue import Queue as queue
-else:
-    from queue import queue as queue
+try:
+    import queue
+except ImportError:
+    import Queue as queue
 
 import thriftpy
 poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
@@ -58,7 +56,7 @@ class ThreadPool(object):
     """
 
     def __init__(self, num_threads):
-        self.tasks = queue(num_threads)
+        self.tasks = queue.Queue(num_threads)
         for _ in range(num_threads):
             Worker(self.tasks)
 

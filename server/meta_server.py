@@ -23,7 +23,7 @@ class MetaImager(object):
     __metaclass__ = ABCMeta
 
     def __init__(self):
-        pass
+        self._streaming_thread = None
 
     @abstractmethod
     def still(self):
@@ -33,6 +33,51 @@ class MetaImager(object):
         :return: [[R], [G], [B]] array of 0-255 values representing RGB
         """
         pass
+
+    def stream_jpg_to_folder(self, path, max_framerate=1, resolution=(640, 480)):
+        # type: (str, int) -> None
+        """
+        Continuously captures frames to a the given `path` at the given `resolution`, up to the `max_framerate` fps.
+        This method should come at a lower priority than the `still` method, i.e. if a `still()` method call comes in,
+        it should be capture immediately rather than for this method even if this means dropping the framerate.
+        Args:
+            path: path to save the images to
+            max_framerate: maximum framerate, note that implementations may have a (significantly) lower framerate
+            resolution: resolution to save the JPEG images as
+        """
+        import threading
+        import time
+        from PIL import Image
+
+        class StreamingThread(threading.Thread):
+            def __init__(self, capture_method, path_, max_framerate_=1, resolution_=(640, 480)):
+                self.capture_method = capture_method
+                self.path = path_
+                self.max_framerate = max_framerate_
+                self.resolution = resolution_
+                self.frame_counter = 0
+                super(StreamingThread, self).__init__()
+                self.daemon = True
+                self.start()
+
+            def run(self):
+                last_time = time.time()
+                while True:
+                    if time.time() > (last_time + (1 / max_framerate)):
+                        last_time = time.time()
+                        im = Image.fromarray(self.capture_method())
+                        im.thumbnail(self.resolution)
+                        im.save(self.path + '/{}.jpg'.format(self.frame_counter))
+                        self.frame_counter += 1
+                    else:
+                        time.sleep(1 / self.max_framerate / 4)
+
+        self._streaming_thread = StreamingThread(self.still, path_=path, max_framerate_=max_framerate,
+                                                 resolution_=resolution)
+
+    def stop_streaming(self):
+        if self._streaming_thread:
+            self._streaming_thread = None
 
 
 class MetaImagingServer(object):
@@ -153,7 +198,7 @@ class MetaImagingServer(object):
             args = inspect.getargspec(pointer).args
             try:
                 args.remove('self')
-            except ValueError:
+            except ValueError:  # pragma: no cover
                 pass
             output_dict[name] = args
 

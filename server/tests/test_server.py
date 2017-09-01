@@ -3,18 +3,15 @@ import imghdr
 import pytest
 from PIL import Image
 
-from server.meta_server import MetaImagingServer
 
+# noinspection PyMethodMayBeStatic
 class MetaServerContract(object):
     @pytest.fixture(scope="module")
     def concrete_server(self):
         raise NotImplementedError('You must override the @pytest.fixture `concrete_server`')
 
-    def test_concrete_server_type(self, concrete_server):
-        assert isinstance(concrete_server, MetaImagingServer)
-
     def test_ping(self, concrete_server):
-        assert concrete_server.ping() == True
+        assert concrete_server.ping() is True
 
     def test_identify(self, concrete_server):
         identifier = concrete_server.identify()
@@ -54,3 +51,16 @@ class MetaServerContract(object):
         image = Image.open(image_bytes)
         assert image.size > (0, 0)
         assert image.format == 'PNG'
+
+    def test_enumerate_methods(self, concrete_server):
+        result = concrete_server.enumerate_methods()
+        assert isinstance(result, dict)
+        assert all([isinstance(key, str) for key in result])
+        assert result['ping'] == []
+        assert result['identify'] == []
+        assert result['stream_url'] == []
+        assert result['shutdown'] == []
+        assert 'start_capture' in result
+        assert 'retrieve_still_jpg' in result
+        assert 'retrieve_still_png' in result
+        assert 'enumerate_methods' in result

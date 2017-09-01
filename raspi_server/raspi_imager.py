@@ -1,4 +1,3 @@
-import os
 import threading
 
 from picamera import PiCamera
@@ -42,50 +41,14 @@ class RPiCameraImager(MetaImager):
                 self.camera.resolution = old_resolution
                 return raw_capture.array[0:self.req_reso[0]][0:self.req_reso[1]]  # Crop to size as can camera rounds up
 
-    def capture_to_folder(self, fpath, framerate=5, resolution=(640, 480)):
-        # type: (str, int, (int,int)) -> None
-        """
-        Starts a continuous capture of .jpgs to the given `path` at the given `framerate`. For example, this may be used
-        in an MJPEG streaming scenario, where new .jpgs are streamed out over the web.
-        Args:
-            fpath: path to store the images in. Note that write permissions will be needed
-            framerate: framerate (fps) to capture at. Recommended range of 1-15fps.
-            resolution: the resolution to capture at. Recommended below 720p.
-        """
+    def stream_jpg_to_folder(self, path_, max_framerate=3, resolution=(640, 480)):
+        def _capture_continuous():
+            for _ in self.camera.capture_continuous(path_ + '/img{timestamp:%Y-%m-%d-%H-%M}-{counter:03d}.jpg',
+                                                    use_video_port=True):
+                pass
 
-        # noinspection PyShadowingNames
-        class CaptureThread(threading.Thread):
-            def __init__(self, camera, fpath, framerate, resolution):
-                super(CaptureThread, self).__init__()
-                self.camera = camera
-                self.camera.framerate = framerate
-                self.camera.resolution = resolution
-                self.out_path = fpath
-                self.daemon = True
-                self._stopevent = threading.Event()
-                if not os.path.exists(fpath):
-                    os.makedirs(fpath)
-
-            def run(self):
-                for _ in self.camera.capture_continuous(
-                                self.out_path + '/img{timestamp:%Y-%m-%d-%H-%M}-{counter:03d}.jpg',
-                        use_video_port=True):
-                    if self._stopevent.isSet():
-                        break
-
-            def stop(self, timeout=None):
-                self._stopevent.set()
-                threading.Thread.join(self, timeout)
-                import shutil
-                shutil.rmtree(self.out_path)  # Clean up captures
-
-        self.folder_capture_thread = CaptureThread(camera=self.camera, fpath=fpath, framerate=framerate,
-                                                   resolution=resolution)
-        self.folder_capture_thread.start()
-
-    def stop_capture_to_folder(self):
-        """
-        Stops the camera from capturing to the folder, if it was set up in the first place.
-        """
-        if self.folder_capture_thread:
-            self.folder_capture_thread.stop()
+        self.camera.framerate = max_framerate
+        self.camera.resolution = resolution
+        self._streaming_thread = threading.Thread(target=_capture_continuous)
+        self._streaming_thread.daemon = True
+        self._streaming_thread.start()

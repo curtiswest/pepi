@@ -6,9 +6,13 @@ import logging
 import os
 import tempfile
 from io import BytesIO
+import sys
+import uuid
 
 from PIL import Image
-from server import MetaImager, MetaImagingServer, StreamerThread, IPTools
+sys.path.append('..')
+# noinspection PyPep8
+from server import MetaImager, MetaImagingServer, MJPGStreamer, IPTools
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,16 +25,17 @@ __status__ = 'Development'
 
 
 class RaspPiImagingServer(MetaImagingServer):
+
+    STREAM_PORT = 6001
+
     def __init__(self, imager):
         # type: (MetaImager) -> None
         super(RaspPiImagingServer, self).__init__(imager=imager)
         self._stored_captures = dict()
         self.imager = imager
         self.stream_path = tempfile.mkdtemp()
-        self.streamer = StreamerThread(self.stream_path)
-        self.streamer.start()
-        # if isinstance(imager, RPiCameraImager):
-        #     self.imager.capture_to_folder(self.stream_path)
+        self.streamer = MJPGStreamer(self.stream_path, port=self.STREAM_PORT)
+        self.imager.stream_jpg_to_folder(self.stream_path)
 
     @staticmethod
     def _current_ip():
@@ -46,35 +51,33 @@ class RaspPiImagingServer(MetaImagingServer):
         # type: () -> str
         # Extract serial from the "/proc/cpuinfo" file as the server ID
         try:
-            f = open('/proc/cpuinfo', 'r')
-        except IOError: # pragma: no cover
-            return 'ERROR00000000000'
-        else:
-            serial = '0000000000000000'
-            for line in f:
-                if line[0:6] == 'Serial':
-                    serial = line[10:26]
-            f.close()
-            return serial
+            with open('/proc/cpuinfo', 'r') as f:
+                for line in f:
+                    if line[0:6] == 'Serial':
+                        return line[10:26]
+                else:
+                    return uuid.uuid4().hex[0:16]
+        except IOError:
+            return uuid.uuid4().hex[0:16]
 
-    def shutdown(self):
+    def shutdown(self):  # pragma: no cover
         logging.info('Got shutdown command')
         os.system('shutdown now')
 
     def stream_url(self):
         # type: () -> str
-        return 'http://{}:{}/stream.mjpeg'.format(self._current_ip(), 6001)  # TODO convert to getting real port
+        return 'http://{}:{}/stream.mjpeg'.format(self._current_ip(), self.STREAM_PORT)
 
     def start_capture(self, data_code):
         image = Image.fromarray(self.imager.still())
         self._stored_captures[data_code] = image
 
     def _encode_from_stored_capture_(self, data_code, encoding, quality):
-        # type: (str, str, int) -> Optional[str]
+        # type: (str, str, int) -> str or None
         image_buffer = BytesIO()
         try:
             image = self._stored_captures.pop(data_code)
-        except KeyError: # pragma: no cover
+        except KeyError:  # pragma: no cover
             return None
         else:
             image.save(image_buffer, encoding, quality=quality)

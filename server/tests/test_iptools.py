@@ -1,11 +1,12 @@
-import pytest
 import netifaces
 
 from server import IPTools
 
+
+# noinspection PyAttributeOutsideInit,PyPep8
 class TestIPTools(object):
     def test_current_ip(self, monkeypatch):
-        def mock_netifaces_ifaddrs(interface):
+        def mock_netifaces_ifaddrs(_):
             if self.first_mock_netifaces:
                 self.first_mock_netifaces = False
                 return {netifaces.AF_LINK: [{'addr': u'00:e0:4c:68:01:cc'}],
@@ -21,7 +22,7 @@ class TestIPTools(object):
         assert ip_list[0] == '10.0.0.25'
 
     def test_current_ip_for_multiple(self, monkeypatch):
-        def mock_netifaces_ifaddrs(interface):
+        def mock_netifaces_ifaddrs(_):
             self.mock_netifaces_counter += 1
             return {netifaces.AF_LINK: [{'addr': u'00:e0:4c:68:01:cc'}],
              netifaces.AF_INET: [{'broadcast': u'10.0.0.255', 'netmask': u'255.255.255.0', 'addr': u'10.0.0.{}'.format(self.mock_netifaces_counter)}],
@@ -34,6 +35,39 @@ class TestIPTools(object):
         zipped = zip(ip_list, interface_ip_count)
         for ip, count in zipped:
             assert ip == '10.0.0.{}'.format(count)
+
+    def test_no_best_candidate_ip_no_gateway(self, monkeypatch):
+        def mock_netifaces_ifaddrs(_):
+            self.mock_netifaces_counter += 1
+            return {netifaces.AF_LINK: [{'addr': u'00:e0:4c:68:01:cc'}],
+             netifaces.AF_INET: [{'broadcast': u'10.0.0.255', 'netmask': u'255.255.255.0', 'addr': u'65.23.23.{}'.format(self.mock_netifaces_counter)}],
+             netifaces.AF_INET6: [{'netmask': u'ffff:ffff:ffff:ffff::/64', 'flags': 1024, 'addr': u'fe80::81a:bbbb:5899:f449%en4'}]}
+
+        self.mock_netifaces_counter = 1
+        monkeypatch.setattr('netifaces.ifaddresses', mock_netifaces_ifaddrs)
+        ip_list = IPTools.current_ips()
+        interface_ip_count = [x+2 for x in range(len(netifaces.interfaces()))]
+        zipped = zip(ip_list, interface_ip_count)
+        for ip, count in zipped:
+            assert ip == '65.23.23.{}'.format(count)
+
+    def test_no_best_candidate_no_gateway(self, monkeypatch):
+        def mock_netifaces_gateways():
+            return {}
+        def mock_netifaces_ifaddrs(_):
+            self.mock_netifaces_counter += 1
+            return {netifaces.AF_LINK: [{'addr': u'00:e0:4c:68:01:cc'}],
+             netifaces.AF_INET: [{'broadcast': u'10.0.0.255', 'netmask': u'255.255.255.0', 'addr': u'127.0.0.{}'.format(self.mock_netifaces_counter)}],
+             netifaces.AF_INET6: [{'netmask': u'ffff:ffff:ffff:ffff::/64', 'flags': 1024, 'addr': u'fe80::81a:bbbb:5899:f449%en4'}]}
+
+        self.mock_netifaces_counter = 1
+        monkeypatch.setattr('netifaces.ifaddresses', mock_netifaces_ifaddrs)
+        monkeypatch.setattr('netifaces.gateways', mock_netifaces_gateways)
+        ip_list = IPTools.current_ips()
+        interface_ip_count = [x + 2 for x in range(len(netifaces.interfaces()))]
+        zipped = zip(ip_list, interface_ip_count)
+        for ip, count in zipped:
+            assert ip == '127.0.0.{}'.format(count)
 
     def test_gateway_ip(self, monkeypatch):
         def mock_netifaces_gateways():
@@ -50,7 +84,37 @@ class TestIPTools(object):
 
         monkeypatch.setattr('netifaces.gateways', mock_netifaces_gateways)
         gateway_ip = IPTools.gateway_ip()
-        assert gateway_ip == None
+        assert not gateway_ip
+
+    def test_current_ips_without_gateway(self, monkeypatch):
+        def mock_netifaces_gateways():
+            return {}
+
+        def mock_netifaces_ifaddrs(_):
+            if self.first_mock_netifaces:
+                self.first_mock_netifaces = False
+                return {netifaces.AF_LINK: [{'addr': u'00:e0:4c:68:01:cc'}],
+                 netifaces.AF_INET: [{'broadcast': u'10.0.0.255', 'netmask': u'255.255.255.0', 'addr': u'127.0.0.1'}],
+                 netifaces.AF_INET6: [{'netmask': u'ffff:ffff:ffff:ffff::/64', 'flags': 1024, 'addr': u'fe80::81a:bbbb:5899:f449%en4'}]}
+            else:
+                self.mock_netifaces_counter += 1
+                return {netifaces.AF_LINK: [{'addr': u'00:e0:4c:68:01:cc'}],
+                        netifaces.AF_INET: [{'broadcast': u'10.0.0.255', 'netmask': u'255.255.255.0',
+                                             'addr': u'10.0.0.{}'.format(self.mock_netifaces_counter)}],
+                        netifaces.AF_INET6: [{'netmask': u'ffff:ffff:ffff:ffff::/64', 'flags': 1024,
+                                              'addr': u'fe80::81a:bbbb:5899:f449%en4'}]}
+
+        self.first_mock_netifaces = True
+        self.mock_netifaces_counter = 1
+        monkeypatch.setattr('netifaces.gateways', mock_netifaces_gateways)
+        monkeypatch.setattr('netifaces.ifaddresses', mock_netifaces_ifaddrs)
+        ip_list = IPTools.current_ips()
+        interface_ip_count = [x+2 for x in range(len(netifaces.interfaces()))]
+
+        assert '127.0.0.1' not in ip_list
+        zipped = zip(ip_list, interface_ip_count)
+        for ip, count in zipped:
+            assert ip == '10.0.0.{}'.format(count)
 
     def test_get_first_digits_from(self):
         test_ip = '10.0.0.0'

@@ -3,6 +3,7 @@ import subprocess
 import logging
 import datetime
 import time
+from future.utils import iteritems
 
 import thriftpy
 poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
@@ -20,6 +21,7 @@ __maintainer__ ='Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'
 
+str = type('')
 
 def base_dir():
     """
@@ -90,11 +92,11 @@ def download_images(all_servers):
                 else:
                     downloaded_images[id] = data_code
                     print('Image length: {} bytes'.format(len(image)))
-                    out_file = open('{}/{}_{}.jpeg'.format(image_dir, server['id'], data_code), 'w')
+                    out_file = open('{}/{}_{}.jpeg'.format(image_dir, server['id'], data_code), 'wb')
                     out_file.write(image)
                     out_file.close()
     print('app.server_data: {}'.format(app.server_data))
-    [app.server_data[id].remove(data_code) for id, data_code in downloaded_images.viewitems()]
+    [app.server_data[id].remove(data_code) for id, data_code in iteritems(downloaded_images)]
 
 def identify_servers(servers):
     out_servers = []
