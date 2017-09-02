@@ -1,85 +1,136 @@
-import subprocess
+#!/usr/bin/env python
+
 import os
 import time
+import glob
+import logging
 import threading
-import picamera
-import sys
-import atexit
+from io import BytesIO
+try:  # pragma: no cover
+    # noinspection PyCompatibility
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+except ImportError:  # pragma: no cover
+    # Try with Python 2
+    # noinspection PyCompatibility
+    from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
-sys.path.append('../')
-from utils.stoppablethread import StoppableThread
+from PIL import Image
 
-class RecordingToFileThread(StoppableThread):
-    def __init__(self, camera):
-        super(RecordingToFileThread, self).__init__()
-
-        # Set up camera
-        if isinstance(camera, picamera.PiCamera):
-            self.camera = camera
-        else:
-            self.camera = picamera.PiCamera()
-        self.old_resolution = self.camera.resolution
-        self.old_framerate = self.camera.framerate
-        self.camera.resolution = [640, 480]
-        self.camera.framerate = 5
-
-    def run(self):
-        # Keep recording until this thread receives a stop event
-        record_path = '/tmp/stream'
-        if not os.path.exists(record_path):
-            os.makedirs(record_path)
-
-        for filename in self.camera.capture_continuous('/tmp/stream/img{timestamp:%Y-%m-%d-%H-%M}-{counter:03d}.jpg', use_video_port=True):
-            if self.is_stopped():
-                break
-
-        # Stop recording and return camera to previous setup and close socket
-        self.camera.framerate = self.old_framerate
-        self.camera.resolution = self.old_resolution
+__author__ = 'Curtis West'
+__copyright__ = 'Copyright 2017, Curtis West'
+__version__ = '2.0a'
+__maintainer__ = 'Curtis West'
+__email__ = 'curtis@curtiswest.net'
+__status__ = 'Development'
 
 
-class MJPG_Streamer(object):
-    def exit_handler(self):
-        print('exit handler')
-        if self.process:
-            self.process.kill()
+class MJPGStreamer(object):
+    """
+    Starts a HTTP stream based on JPEG images obtained from the specified folder.
+    """
+    def __init__(self, img_path, ip='0.0.0.0', port=6001):
+        # type: (str, str, int) -> None
+        """
+        Initialises this MJPGStreamer against the given `img_path, and ip:port combination, then starts the server
+        as a daemon thread.
+        Args:
+            img_path: the path to obtain JPEG imagery from
+            ip: ip to bind the server to
+            port: port to bind the server to
+        """
+        # noinspection PyPep8Naming
+        HandlerClass = self.stream_handler_factory(img_path)
+        self.server = HTTPServer((ip, port), HandlerClass)
+        self.server_thread = threading.Thread(target=self.server.serve_forever)
+        self.server_thread.daemon = True
+        self.server_thread.start()
 
-    def __init__(self):
-        self.process = None
-        pass
+    @staticmethod
+    def newest_file_in_folder(path, delete_old=True):
+        # type: (str) -> str
+        """
+        Generator that yields the second newest file by modified time in the given `path`. The second newest file is
+        yielded so that files in the process of being written are not used before they are complete; this is generally
+        not an issue that the second newest file faces.
+        Args:
+            path: path to the folder to check for new files
+            delete_old: True to delete all but the second_newest and newest files, False to not delete any
+        """
+        if not os.path.exists(path):  # pragma: no cover
+            try:
+                os.makedirs(path)
+            except OSError as e:
+                logging.warn(e)
+        previous = None
+        while True:
+            file_list = sorted(glob.glob(path + '/*'), key=os.path.getmtime)
+            if not file_list or len(file_list) < 2:  # pragma: no cover
+                time.sleep(0.1)
+                continue
 
-    def start_with_file(self, path_to_file, file_name):
-        print('input file path: {}'.format(path_to_file + ' / ' + file_name))
-        output_arg = '/usr/local/lib/mjpg-streamer/output_http.so -w ./www'
-        input_arg =  '/usr/local/lib/mjpg-streamer/input_file.so -f {} -r -delay 0.09'.format(path_to_file)
-        args = ['/usr/local/bin/mjpg_streamer',
-                '-o', output_arg,
-                '-i', input_arg]
-        self.process = subprocess.Popen(args=args)
-        atexit.register(self.exit_handler)
+            second_newest = file_list[-2]
+            if second_newest == previous:
+                time.sleep(0.1)
+                continue
 
-    def stop(self):
-        self.process.kill()
+            previous = second_newest
+            if delete_old:
+                older_than_second_newest = file_list[0:-3]
+                for old_file in older_than_second_newest:
+                    os.remove(old_file)
 
-class StreamLauncher(object):
-    def __init__(self, camera=None):
-        self.mjpg_streamer = MJPG_Streamer()
-        self.record_thread = RecordingToFileThread(camera)
-        self.record_thread.daemon = True
-        self.camera = self.record_thread.camera
+            yield second_newest
 
-    def start(self):
-        self.mjpg_streamer.start_with_file('/tmp/stream', 'raspi_image.jpg')
-        self.record_thread.start()
+    @staticmethod
+    def jpeg_image_generator(path, quality=85, resolution=(640, 480)):
+        # type: (str, bool, (int, int)) -> bytes
+        """
+        Generates JPEG bytes from any image file in the given path based on the second newest file modified in the given
+         `path`.
 
-    def stop(self):
-        self.mjpg_streamer.stop()
-        self.record_thread.stop()
+        JPEG files (and other image formats) are compressed to a JPEG as they must be modified to be resized.
+        Args:
+            path: path to the folder to check for new files
+            quality: JPEG quality to compress to (0 lowest quality, 100 highest)
+            resolution: resolution to yield the JPEGs as
+        """
+        for file_ in MJPGStreamer.newest_file_in_folder(path):
+            try:
+                frame = Image.open(file_)
+                frame.thumbnail(resolution)
+                frame_buffer = BytesIO()
+                frame.save(frame_buffer, 'JPEG', quality=quality)
+            except Exception as e:
+                logging.warn(e)
+                continue
+            else:
+                yield frame_buffer.getvalue()
 
-if __name__ == '__main__':
-    camera = picamera.PiCamera()
-    s = StreamLauncher(camera)
-    s.start()
-    time.sleep(5)
-    while threading.active_count > 0:
-        time.sleep(0.1)
+    def stream_handler_factory(self, img_path):
+        # type: (str) -> MJPGStreamHandler
+        """
+        Create a MJPGStreamHandler with the `img_path` set inside of it.
+
+        This is necessary due to how BaseHTTPServer creates the BaseHTTPRequestHandler.
+        Args:
+            img_path: the path to give to MJPGStreamHandler
+        """
+
+        class MJPGStreamHandler(BaseHTTPRequestHandler, object):
+            def __init__(self, *args, **kwargs):
+                self.img_path = img_path
+                super(MJPGStreamHandler, self).__init__(*args, **kwargs)
+
+            def do_GET(self):
+                if self.path.endswith('.mjpg') or self.path.endswith('.mjpeg'):
+                    self.send_response(200)
+                    self.send_header('Content-type', b'multipart/x-mixed-replace; boundary=frame')
+                    self.end_headers()
+                    for image in MJPGStreamer.jpeg_image_generator(self.img_path):
+                        self.wfile.write(b'--frame')
+                        self.send_header('Content-type', 'image/jpeg')
+                        self.send_header('Content-length', str(len(image)))
+                        self.end_headers()
+                        self.wfile.write(image)
+
+        return MJPGStreamHandler

@@ -1,16 +1,11 @@
 #!/usr/bin/env python
 
-import multiprocessing
-import logging.config
-
-import client
-
-# Launch backend
-logging.config.fileConfig('../setup/logging_config.ini')
-backend = multiprocessing.Process(target=client.ClientBackend)
-backend.daemon = True
-backend.start()
-
-# Launch frontend
 from app import app
+import heartbeater
+from collections import defaultdict
+
+app.heartbeater = heartbeater.Heartbeater(min_interval=5, base_ip='10.0.0.')
+app.heartbeater.start()
+app.server_data = defaultdict(list)
+app.capture_no = 1
 app.run(debug=False, host="0.0.0.0")
