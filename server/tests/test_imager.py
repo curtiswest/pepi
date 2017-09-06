@@ -12,7 +12,7 @@ from PIL import Image
 class MetaImagerContract(object):
     @pytest.fixture(scope="module")
     def concrete_imager(self):
-        raise NotImplementedError('You must override the @pytest.fixture `concrete_server`')
+        raise NotImplementedError('You must override the @pytest.fixture `server`')
 
     def test_still(self, concrete_imager):
         image = concrete_imager.still()

@@ -6,6 +6,8 @@ import glob
 import logging
 import threading
 from io import BytesIO
+import atexit
+
 try:  # pragma: no cover
     # noinspection PyCompatibility
     from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -13,21 +15,28 @@ except ImportError:  # pragma: no cover
     # Try with Python 2
     # noinspection PyCompatibility
     from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+import socketserver
 
 from PIL import Image
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
-__version__ = '2.0a'
+__version__ = '2.1'
 __maintainer__ = 'Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'
+
+
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
 
 
 class MJPGStreamer(object):
     """
     Starts a HTTP stream based on JPEG images obtained from the specified folder.
     """
+
     def __init__(self, img_path, ip='0.0.0.0', port=6001):
         # type: (str, str, int) -> None
         """
@@ -40,10 +49,24 @@ class MJPGStreamer(object):
         """
         # noinspection PyPep8Naming
         HandlerClass = self.stream_handler_factory(img_path)
-        self.server = HTTPServer((ip, port), HandlerClass)
-        self.server_thread = threading.Thread(target=self.server.serve_forever)
+        server = ThreadedHTTPServer((ip, port), HandlerClass)
+        # self.server = HTTPServer((ip, port), HandlerClass)
+        server.daemon_threads = True
+        server.timeout = 5
+
+        def handle_request_loop():
+            while True:
+                server.handle_request()
+
+        def cleanup():
+            self.server_thread = None
+
+        atexit.register(cleanup)
+        # self.server_thread = threading.Thread(target=server.serve_forever)
+        self.server_thread = threading.Thread(target=handle_request_loop)
         self.server_thread.daemon = True
         self.server_thread.start()
+        print('Serving forever')
 
     @staticmethod
     def newest_file_in_folder(path, delete_old=True):
@@ -77,7 +100,10 @@ class MJPGStreamer(object):
             if delete_old:
                 older_than_second_newest = file_list[0:-3]
                 for old_file in older_than_second_newest:
-                    os.remove(old_file)
+                    try:
+                        os.remove(old_file)
+                    except (IOError, OSError):
+                        pass
 
             yield second_newest
 
@@ -121,6 +147,7 @@ class MJPGStreamer(object):
                 self.img_path = img_path
                 super(MJPGStreamHandler, self).__init__(*args, **kwargs)
 
+            # noinspection PyPep8Naming
             def do_GET(self):
                 if self.path.endswith('.mjpg') or self.path.endswith('.mjpeg'):
                     self.send_response(200)

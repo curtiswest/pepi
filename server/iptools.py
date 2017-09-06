@@ -5,7 +5,7 @@ import netifaces
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
-__version__ = '2.0a'
+__version__ = '2.1'
 __maintainer__ = 'Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'

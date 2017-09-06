@@ -1,66 +1,95 @@
 import imghdr
+import sys
 
 import pytest
 from PIL import Image
+
+from ..meta_server import ImageUnavailable
+
+if sys.version_info < (3,):
+    text_type = (str, unicode)
+    binary_type = str
+else:
+    text_type = str
+    binary_type = bytes
 
 
 # noinspection PyMethodMayBeStatic
 class MetaServerContract(object):
     @pytest.fixture(scope="module")
-    def concrete_server(self):
-        raise NotImplementedError('You must override the @pytest.fixture `concrete_server`')
+    def server(self):
+        raise NotImplementedError('You must override the @pytest.fixture `server`')
 
-    def test_ping(self, concrete_server):
-        assert concrete_server.ping() is True
+    def test_ping(self, server):
+        assert server.ping() is True
 
-    def test_identify(self, concrete_server):
-        identifier = concrete_server.identify()
-        assert isinstance(identifier, str)
+    def test_identify(self, server):
+        identifier = server.identify()
+        assert isinstance(identifier, text_type)
         assert len(identifier) > 0
 
-    def test_stream_url(self, concrete_server):
-        assert isinstance(concrete_server.stream_url(), str)
+    def test_stream_url(self, server):
+        stream_urls = server.stream_urls()
+        assert isinstance(stream_urls, list)
+        print('text type: {}'.format(text_type))
+        for url in stream_urls:
+            print(type(url))
+        assert all([isinstance(x, text_type) for x in stream_urls])
+        assert all([x.startswith('http://') or x.startswith('https://') for x in stream_urls])
 
-    def test_capturing_to_jpg(self, concrete_server):
+    def test_capturing_to_jpgs(self, server):
         import time
         from io import BytesIO
         data_code = 'my_data_code'
-        concrete_server.start_capture(data_code)
+        server.start_capture(data_code)
         time.sleep(1)
-        jpg = concrete_server.retrieve_still_jpg(data_code)
+        jpg_strings = server.retrieve_still_jpgs(data_code)
 
-        assert isinstance(jpg, (str, bytes))
-        assert len(jpg) > 0
-        image_bytes = BytesIO(jpg)
-        assert imghdr.what(image_bytes) == 'jpeg'
-        image = Image.open(image_bytes)
-        assert image.size > (0, 0)
-        assert image.format == 'JPEG'
+        assert isinstance(jpg_strings, list)
+        assert all([isinstance(image, binary_type) for image in jpg_strings])
+        assert all([len(image) > 0 for image in jpg_strings])
+        for jpg in jpg_strings:
+            image_bytes = BytesIO(jpg)
+            assert imghdr.what(image_bytes) == 'jpeg'
+            image = Image.open(image_bytes)
+            assert image.size > (0, 0)
+            assert image.format == 'JPEG'
 
-    def test_capturing_to_png(self, concrete_server):
+    def test_image_unavailable(self, server):
+        with pytest.raises(ImageUnavailable):
+            server.retrieve_still_jpgs('not_a_real_data_code')
+        with pytest.raises(ImageUnavailable):
+            server.retrieve_still_pngs('not_a_real_data_code')
+
+    def test_capturing_to_pngs(self, server):
         import time
         from io import BytesIO
         data_code = 'my_data_code'
-        concrete_server.start_capture(data_code)
+        server.start_capture(data_code)
         time.sleep(1)
-        png = concrete_server.retrieve_still_png(data_code)
-        assert isinstance(png, (str, bytes))
-        assert len(png) > 0
-        image_bytes = BytesIO(png)
-        assert imghdr.what(image_bytes) == 'png'
-        image = Image.open(image_bytes)
-        assert image.size > (0, 0)
-        assert image.format == 'PNG'
+        png_strings = server.retrieve_still_pngs(data_code)
 
-    def test_enumerate_methods(self, concrete_server):
-        result = concrete_server.enumerate_methods()
+        assert isinstance(png_strings, list)
+        assert all([isinstance(image, binary_type) for image in png_strings])
+        assert all([len(image) > 0 for image in png_strings])
+        for count, png in enumerate(png_strings):
+            image_bytes = BytesIO(png)
+            assert imghdr.what(image_bytes) == 'png'
+            image = Image.open(image_bytes)
+            assert image.size > (0, 0)
+            assert image.format == 'PNG'
+            image.save('test_{}.png'.format(count))
+
+    def test_enumerate_methods(self, server):
+        result = server.enumerate_methods()
         assert isinstance(result, dict)
-        assert all([isinstance(key, str) for key in result])
+        assert all([isinstance(key, text_type) for key in result])
+        assert all([isinstance(value, list) for value in result.values()])
         assert result['ping'] == []
         assert result['identify'] == []
-        assert result['stream_url'] == []
+        assert result['stream_urls'] == []
         assert result['shutdown'] == []
         assert 'start_capture' in result
-        assert 'retrieve_still_jpg' in result
-        assert 'retrieve_still_png' in result
+        assert 'retrieve_still_jpgs' in result
+        assert 'retrieve_still_pngs' in result
         assert 'enumerate_methods' in result

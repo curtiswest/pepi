@@ -8,18 +8,19 @@ import threading
 try:
     import queue
 except ImportError:
+    # noinspection PyPep8Naming
     import Queue as queue
 
 import thriftpy
-poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
 from thriftpy.rpc import client_context
 import thriftpy.transport
 
+poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
 logging.basicConfig(level=logging.INFO)
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
-__version__ = '2.0a'
+__version__ = '2.1'
 __maintainer__ = 'Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'
@@ -98,7 +99,7 @@ class Heartbeater(threading.Thread):
     def ping_server_at_ip(ip):
         # type: (str) -> (str, bool)
         try:
-            with client_context(poc_thrift.ImagingServer, ip, 6000, connect_timeout=300) as c:
+            with client_context(poc_thrift.ImagingServer, ip, 6000, connect_timeout=300, socket_timeout=1000) as c:
                 ping_result = c.ping()
         except thriftpy.transport.TTransportException:
             return ip, False

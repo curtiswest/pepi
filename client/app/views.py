@@ -1,27 +1,33 @@
 import os
+import sys
 import subprocess
 import logging
 import datetime
 import time
 from future.utils import iteritems
+import collections
 
 import thriftpy
-poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
 from thriftpy.rpc import client_context
 import thriftpy.transport
 import thriftpy.thrift
 from flask import render_template, flash, url_for, request, redirect
-from app import app
 
+from app import app
+sys.path.append('../')
+from server import ImageUnavailable
+
+poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
-__version__ = '2.0a'
-__maintainer__ ='Curtis West'
+__version__ = '2.1'
+__maintainer__ = 'Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'
 
 str = type('')
+
 
 def base_dir():
     """
@@ -29,6 +35,7 @@ def base_dir():
     """
     folder = os.path.dirname(os.path.realpath(__file__)).split('/')
     return '/'.join(folder[:-1])
+
 
 def get_image_dir():
     """
@@ -40,6 +47,7 @@ def get_image_dir():
         os.makedirs(image_dir)
     return image_dir
 
+
 def open_images_folder():
     """
     Opens the `images` directory in the native file explorer, if supported
@@ -49,21 +57,23 @@ def open_images_folder():
         os.makedirs(images_folder)
     subprocess.call(["open", images_folder])
 
-def find_server_by(servers, id=None, ip=None):
+
+def find_server_by(servers, id_=None, ip=None):
     for server in servers:
-        if server['id'] == id or server['ip'] == ip:
+        if server['id'] == id_ or server['ip'] == ip:
             return server
     else:
         return None
 
+
 def capture(all_servers, server_id):
-    def _capture_single(server):
+    def _capture_single(server_):
         with client_context(poc_thrift.ImagingServer, server['ip'], 6000) as c:
-            app.server_data[server['id']].append(str(app.capture_no))
+            app.server_data[server_['id']].append(str(app.capture_no))
             c.start_capture(str(app.capture_no))
 
     if server_id != 'all':
-        server = find_server_by(all_servers, id=server_id)
+        server = find_server_by(all_servers, id_=server_id)
         if server:
             _capture_single(server)
             app.capture_no += 1
@@ -75,37 +85,46 @@ def capture(all_servers, server_id):
             _capture_single(server)
         app.capture_no += 1
 
+
 def download_images(all_servers):
     image_dir = get_image_dir()
-    downloaded_images = dict()
+    downloaded_images = collections.defaultdict(list)
+    server_data = app.server_data.copy()
 
-    for id in app.server_data:
-        server = find_server_by(all_servers, id=id)
+    for id_ in server_data:
+        server = find_server_by(all_servers, id_=id_)
         with client_context(poc_thrift.ImagingServer, server['ip'], 6000, socket_timeout=10000) as c:
-
-            for data_code in app.server_data[id]:
+            for data_code in server_data[id_]:
                 try:
-                    image = c.retrieve_still_jpg(data_code)
-                except thriftpy.thrift.TApplicationException as e:
-                    print(e)
-                    pass
+                    images = c.retrieve_still_jpgs(data_code)
+                except ImageUnavailable as e:
+                    logging.warn(e)
+                    downloaded_images[id_].append(data_code)
                 else:
-                    downloaded_images[id] = data_code
-                    print('Image length: {} bytes'.format(len(image)))
-                    out_file = open('{}/{}_{}.jpeg'.format(image_dir, server['id'], data_code), 'wb')
-                    out_file.write(image)
-                    out_file.close()
-    print('app.server_data: {}'.format(app.server_data))
-    [app.server_data[id].remove(data_code) for id, data_code in iteritems(downloaded_images)]
+                    downloaded_images[id_].append(data_code)
+                    for count, image in enumerate(images):
+                        logging.info('Received data_code {}. Image length: {} bytes'.format(data_code, len(image)))
+                        out_file = open('{}/id{}_d{}_cam{}.jpeg'.format(image_dir, server['id'], data_code, count), 'wb')
+                        out_file.write(image)
+                        out_file.close()
+
+    for id_, data_code_list in iteritems(downloaded_images):
+        [server_data[id_].remove(data_code) for data_code in data_code_list]
+    app.server_data = server_data
+    logging.info('Client expected data codes now: {}'.format(app.server_data))
+    # [server_data[id_].remove(data_code) for id_, data_code in iteritems(downloaded_images)]
+    # app.server_data = server_data
+
 
 def identify_servers(servers):
     out_servers = []
     for ip in servers:
         try:
             with client_context(poc_thrift.ImagingServer, ip, 6000, socket_timeout=2500) as c:
-                server_dict = {'ip': ip}
-                server_dict['id'] = c.identify()
-                server_dict['stream_url'] = c.stream_url()
+                stream_urls = c.stream_urls()
+                # TODO: add multi-camera support for more than 1 stream per server
+                stream_url = stream_urls[0] if stream_urls else []
+                server_dict = {'ip': ip, 'id': c.identify(), 'stream_url': stream_url}
                 out_servers.append(server_dict)
         except thriftpy.transport.TTransportException as e:
             logging.error(e)
@@ -113,13 +132,14 @@ def identify_servers(servers):
             logging.error(e)
     return out_servers
 
+
 def shutdown(all_servers, server_id):
-    def _shutdown_single(server):
-        with client_context(poc_thrift.ImagingServer, server['ip'], 6000) as c:
+    def _shutdown_single(server_):
+        with client_context(poc_thrift.ImagingServer, server_['ip'], 6000) as c:
             c.shutdown()
 
     if server_id != 'all':
-        server = find_server_by(all_servers, id=server_id)
+        server = find_server_by(all_servers, id_=server_id)
         if server:
             _shutdown_single(server)
         else:
@@ -154,12 +174,12 @@ def index():
                 download_images(all_servers=servers)
                 open_images_folder()
             elif key == 'stream':
-                server = find_server_by(servers, id=request.form[key])
+                server = find_server_by(servers, id_=request.form[key])
                 if server:
                     return redirect(url_for('stream', stream_url=server['stream_url'], server_id=server['id']))
             elif key == 'configure':
                 flash('Configuring servers is not yet implemented in UI', 'warning')
-                server = find_server_by(servers, id=request.form[key])
+                server = find_server_by(servers, id_=request.form[key])
                 if server:
                     return redirect(url_for('configure', server_id=server['id']))
                 pass
@@ -171,9 +191,12 @@ def index():
     # Render the template
     return render_template('/setup.html', title='Setup', servers=servers)
 
+
 @app.route('/setup')
 def configure(server_id):
+    logging.warn('Got config for {} but config not yet implemented'.format(server_id))
     return render_template('/setup.html')
+
 
 @app.route('/stream', methods=['GET'])
 def stream():
