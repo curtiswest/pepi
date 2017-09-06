@@ -2,6 +2,7 @@
 
 if __name__ == "__main__":
     import os
+    import sys
     import logging
 
     import thriftpy
@@ -10,10 +11,16 @@ if __name__ == "__main__":
     from raspi_server import RaspPiImagingServer
     from raspi_imager import RPiCameraImager
 
+    suffix = '/poc.thrift'
     prefix = os.path.abspath('.')
-    if not prefix.endswith('pibox') or not prefix.endswith('pepi'):
-        while not prefix.endswith('pibox') and not prefix.endswith('pepi'):
+
+    if not os.path.isfile(prefix+suffix):
+        while not os.path.isfile(prefix+suffix):
+            if prefix == '/':
+                print('Could not find {} in parent folders'.format(suffix))
+                sys.exit([1])
             prefix, _ = os.path.split(prefix)
+    poc_thrift = thriftpy.load('{}/poc.thrift'.format(prefix), module_name='poc_thrift')
 
     logging.basicConfig(level=logging.DEBUG)
 
