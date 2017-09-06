@@ -11,8 +11,8 @@ if __name__ == "__main__":
     from raspi_imager import RPiCameraImager
 
     prefix = os.path.abspath('.')
-    if not prefix.endswith('pibox'):
-        while not prefix.endswith('pibox'):
+    if not prefix.endswith('pibox') or not prefix.endswith('pepi'):
+        while not prefix.endswith('pibox') and not prefix.endswith('pepi'):
             prefix, _ = os.path.split(prefix)
 
     logging.basicConfig(level=logging.DEBUG)

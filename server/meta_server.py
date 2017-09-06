@@ -8,8 +8,8 @@ from abc import ABCMeta, abstractmethod
 import thriftpy
 
 prefix = os.path.abspath('.')
-if not prefix.endswith('pibox'):
-    while not prefix.endswith('pibox'):
+if not prefix.endswith('pibox') or not prefix.endswith('pepi'):
+    while not prefix.endswith('pibox') and not prefix.endswith('pepi'):
         prefix, _ = os.path.split(prefix)
 
 poc_thrift = thriftpy.load('{}/poc.thrift'.format(prefix), module_name='poc_thrift')
