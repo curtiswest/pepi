@@ -26,7 +26,7 @@ Links
 * PEPI is licensed under `Apache-2.0 <https://github.com/curtiswest/pepi/blob/master/LICENSE>`_.
 * PEPI's source code is `available on GitHub <https://github.com/curtiswest/pepi>`_.
 * PEPI's documentation is `available on ReadTheDocs <https://pepi.readthedocs.io/en/latest/>`_.
-* PEPI uses a continuous integration system provided by Travis CI; `view the test results on Travis-CI <ttps://travis-ci.org/curtiswest/pepi>`_.
+* PEPI uses a continuous integration system provided by Travis CI; `view the test results on Travis-CI <https://travis-ci.org/curtiswest/pepi>`_.
 
 Built With
 ==========
