@@ -25,26 +25,6 @@ __status__ = 'Development'
 ImageUnavailable = poc_thrift.ImageUnavailable
 
 
-class DocstringMeta(ABCMeta):
-    """
-    Metaclass that allows docstring 'inheritance'
-    """
-    pass
-#     # noinspection PyInitNewSignature,PyMethodParameters
-#     def __new__(mcls, classname, bases, cls_dict):
-#         cls = ABCMeta.__new__(mcls, classname, bases, cls_dict)
-#         mro = cls.__mro__[1:]
-#         for name, member in viewitems(cls_dict):
-#             if not getattr(member, '__doc__'):
-#                 for base in mro:
-#                     try:
-#                         member.__doc__ = getattr(base, name).__doc__
-#                         break
-#                     except AttributeError:
-#                         pass
-#         return cls
-
-
 class MetaImager(object):
     """
     MetaImager is an abstract base class that defines the interface
@@ -57,7 +37,7 @@ class MetaImager(object):
     A Imager subclasses MetaImagingServer *must* implement all methods marked
     with @abstractmethod.
     """
-    __metaclass__ = DocstringMeta
+    __metaclass__ = ABCMeta
 
     def __init__(self):
         self._streaming_thread = None
@@ -150,7 +130,7 @@ class MetaImagingServer(object):
     are transparent to the connecting client. In this case, you should return a
     list of encoded images.
     """
-    __metaclass__ = DocstringMeta
+    __metaclass__ = ABCMeta
 
     def __init__(self, imagers):
         self.imagers = imagers

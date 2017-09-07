@@ -75,6 +75,7 @@ class MJPGStreamer(object):
         Generator that yields the second newest file by modified time in the given `path`. The second newest file is
         yielded so that files in the process of being written are not used before they are complete; this is generally
         not an issue that the second newest file faces.
+
         Args:
             path: path to the folder to check for new files
             delete_old: True to delete all but the second_newest and newest files, False to not delete any
@@ -115,6 +116,7 @@ class MJPGStreamer(object):
          `path`.
 
         JPEG files (and other image formats) are compressed to a JPEG as they must be modified to be resized.
+
         Args:
             path: path to the folder to check for new files
             quality: JPEG quality to compress to (0 lowest quality, 100 highest)
@@ -138,6 +140,7 @@ class MJPGStreamer(object):
         Create a MJPGStreamHandler with the `img_path` set inside of it.
 
         This is necessary due to how BaseHTTPServer creates the BaseHTTPRequestHandler.
+
         Args:
             img_path: the path to give to MJPGStreamHandler
         """
