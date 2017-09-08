@@ -7,9 +7,9 @@ PEPI
 .. image:: https://readthedocs.org/projects/pepi/badge/?version=latest
    :target: http://pepi.readthedocs.io/en/latest/?badge=latest
    :alt: Documentation Status
-.. image:: https://landscape.io/github/curtiswest/pepi/master/landscape.svg?style=flat
-   :target: https://landscape.io/github/curtiswest/pepi/master
-   :alt: Code Health
+.. image:: https://api.codacy.com/project/badge/Grade/6873aa2fa807419a8d3321e071479919
+   :target: https://www.codacy.com/app/curtiswest/pepi?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=curtiswest/pepi&amp;utm_campaign=Badge_Grade
+   :alt: Codacy Code Health
 .. image:: https://codecov.io/gh/curtiswest/pepi/branch/master/graph/badge.svg
    :target: https://codecov.io/gh/curtiswest/pepi
    :alt: Code Coverage

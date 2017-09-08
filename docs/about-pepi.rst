@@ -14,11 +14,27 @@ Terminology
 ===========
 In this documentation, we use the following terms:
 
-* **Server**: a camera-equipped computer running the PEPI server software
-* **Client**: the computer running the PEPI client/control software, which manages all connected servers
-* **RPi/Raspberry Pi/Pi**: the Raspberry Pi is a low-cost, single-board computer produced by the Raspberry Pi foundation
-* **Distro**: a distribution of an operating system eg. Ubuntu, Raspbian, etc.
+.. glossary::
 
+   Client
+      the computer running the PEPI client/control software, which manages all connected servers
+
+   Server
+      A camera-equipped computer running the PEPI server software
+
+   Raspberry Pi
+   RPi
+   Pi
+      The `Raspberry Pi`_ is a low-cost, single-board computer produced by the Raspberry Pi foundation.
+
+   Camera Module
+   PiCamera
+      The small camera accessory sold for the Raspberry Pi, or the Python library that interfaces with it.
+
+   Distro
+      A distribution of an operating system eg. Ubuntu, Raspbian, etc.
+
+.. _Raspberry Pi: https://www.raspberrypi.org/
 .. _hardware:
 
 Hardware
@@ -51,4 +67,4 @@ Some of these motivations:
 #. Extensible, well-documented and able to support future needs
 #. Rapidly and reliably capture images across all cameras
 #. Cross-platform, cross-language, so servers running new hardware (e.g. new computer, new cameras) can be implemented in the future without changes to the overall architecture.
-#. Ultimately, produce a low-cost scale that can scale.
+#. Ultimately, produce a low-cost system that can scale.
