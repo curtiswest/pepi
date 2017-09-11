@@ -106,5 +106,5 @@ ENV/
 # Project specific
 active_cameras.txt
 .idea
-images
+client/images
 keys
