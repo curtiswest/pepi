@@ -74,7 +74,7 @@ To enable the camera through the terminal:
   The camera interface is enabled. <OK>
   <Finish>
 
-You will need to reboot after enabling the camera.
+You'll need to reboot after enabling the camera.
 
 .. _quickstart guide: https://picamera.readthedocs.io/en/release-1.13/quickstart.html
 
@@ -90,9 +90,9 @@ While we recommend using a new SSH key-pair for PEPI with the name given below, 
 
 You can generate a new SSH key from most Unix terminals with:
 
-   .. code-block:: console
+.. code-block:: console
 
-     ssh-keygen -t rsa -C "PEPI SSH Key"
+   $ ssh-keygen -t rsa -C "PEPI SSH Key"
 
 You'll be asked to save the SSH key - save it somewhere easy like your home folder under the name pepi_rsa: ``~/pepi_rsa``.
 
@@ -100,13 +100,13 @@ Now the problem is getting the SSH private key onto your Pi's. The easiest way i
 
 .. code-block:: console
 
-  cat ~/pepi_rsa.pub | ssh pi@<IP-ADDRESS> 'cat >> .ssh/authorized_keys'
+   $ cat ~/pepi_rsa.pub | ssh pi@<IP-ADDRESS> 'cat >> .ssh/authorized_keys'
 
 You should now be able to SSH into the Pi without a password (you may be prompted about an unknown host, this is expected for the first usage):
 
 .. code-block:: console
 
-  ssh -i /path/to/your/pepi_rsa pi@<IP-ADDRESS>
+   $ ssh -i /path/to/your/pepi_rsa pi@<IP-ADDRESS>
 
 Client Installation
 ===================
@@ -135,7 +135,7 @@ Client Installation
 
       $ chmod +x run.py
 
-#. Run the client using either of the command below:
+#. Run the client using either of the commands below:
 
    .. code-block:: console
 
@@ -144,7 +144,7 @@ Client Installation
       $ ./run.py
       INFO:werkzeug: * Running on http://0.0.0.0:5000/ (Press CTRL+C to quit)
 
-#. Open your internet browser to `<http://0.0.0.0:5000/>`_ and you should see the PEPI user interface. See :ref:`Using PEPI <using-pepi>`  to learn more about this interface.
+#. Open your internet browser to `<http://0.0.0.0:5000/>`_ and you should see the PEPI user interface. See :ref:`Using PEPI <using-pepi>` to learn more about this interface.
 
 Raspberry Pi Server Installation
 ================================
@@ -162,13 +162,17 @@ Firstly, we need to obtain the software:
 #. SSH into your pi, e.g. ``ssh pi@<IP-ADDRESS>`` or if using `SSH Keys`_ (recommended), ``ssh -i /path/to/pepi_rsa pi@<IP-ADDRESS>``
 #. Clone the latest version of the software from Git
 
-  .. code-block:: console
+   .. code-block:: console
 
-    $ cd ~
-    $ git clone https://github.com/curtiswest/pepi.git
-    $ cd pepi
-    $ ls
-    LICENSE      README.rst   client       poc.thrift   raspi_server server       test         unittest.cfg
+      $ cd ~
+      $ git clone https://github.com/curtiswest/pepi.git
+      $ cd pepi
+      $ ls
+      LICENSE      README.rst   client       poc.thrift   raspi_server server       test         unittest.cfg
+
+Alternatively, if your Pi does not have internet access, you could download a `.zip of the repo` and use a flash drive to transfer it to the Pi.
+
+.. _.zip of the repo: https://github.com/curtiswest/pepi/archive/master.zip
 
 #. Place a copy of your SSH key in the ``raspi_server/keys`` folder if you want to use the utility scripts:
 
@@ -283,7 +287,7 @@ Once you've verified that the card works exactly how you want, you can make an i
       -rw-r--r--   1 root        staff  7948206080 20 Aug 23:23 rpi.img
       $ sudo sync
 
-   The ``rpi.img`` file contains a complete copy of the SD card. It is possible to shrink the image to copy it quicker using a `GParted`_ live boot disk, but you'll need to expand it again once copied across. If you have a lots card to duplicate, you could look into building a `Open Source Image Duplicator`_ to allow you to copy images to several at a time.
+   The ``rpi.img`` file contains a complete copy of the SD card. It is possible to shrink the image to copy it quicker using a `GParted`_ live boot disk, but you'll need to expand it again once copied across. If you have lots of cards to duplicate, you could look into building a `Open Source Image Duplicator`_ to allow you to duplicate several at a time.
 
 .. _GParted: https://gparted.org/
 .. _Open Source Image Duplicator: https://github.com/rockandscissor/osid/
