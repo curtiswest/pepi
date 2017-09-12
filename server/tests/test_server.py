@@ -4,7 +4,7 @@ import sys
 import pytest
 from PIL import Image
 
-from ..meta_server import ImageUnavailable
+from ..pepi_thrift_loader import ImageUnavailable
 
 if sys.version_info < (3,):
     text_type = (str, unicode)
