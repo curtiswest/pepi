@@ -3,12 +3,10 @@ import sys
 import time
 
 import pytest
-import thriftpy
 from thriftpy.rpc import make_server, client_context
 
-from . import MetaServerContract
-
-poc_thrift = thriftpy.load('poc.thrift', module_name='poc_thrift')
+from . import MetaCameraServerContract
+from .. import pepi_thrift
 
 if sys.version_info < (3,):
     text_type = (str, unicode)
@@ -19,7 +17,7 @@ else:
 
 
 # noinspection PyMethodMayBeStatic
-class MetaServerOverThrift(MetaServerContract):
+class MetaCameraServerOverThrift(MetaCameraServerContract):
     @pytest.fixture(scope="module")
     def local_server(self):
         raise NotImplementedError('You must override the @pytest.fixture `local_server`')
@@ -30,7 +28,7 @@ class MetaServerOverThrift(MetaServerContract):
 
     @pytest.fixture(scope="module")
     def run_server(self, local_server, port):
-        server = make_server(poc_thrift.ImagingServer, local_server, '127.0.0.1', port)
+        server = make_server(pepi_thrift.CameraServer, local_server, '127.0.0.1', port)
         t = threading.Thread(target=server.serve)
         t.daemon = True
         t.start()
@@ -40,5 +38,5 @@ class MetaServerOverThrift(MetaServerContract):
     @pytest.fixture(scope="function")
     def server(self, run_server, port):
         time.sleep(0.2)
-        with client_context(poc_thrift.ImagingServer, '127.0.0.1', port) as c:
+        with client_context(pepi_thrift.CameraServer, '127.0.0.1', port) as c:
             yield c

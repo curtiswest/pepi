@@ -4,18 +4,18 @@ server\.tests package
 Submodules
 ----------
 
-server\.tests\.test\_dummy\_imager module
------------------------------------------
+server\.tests\.test\_camera module
+----------------------------------
 
-.. automodule:: server.tests.test_dummy_imager
+.. automodule:: server.tests.test_camera
     :members:
     :undoc-members:
     :show-inheritance:
 
-server\.tests\.test\_imager module
-----------------------------------
+server\.tests\.test\_dummy\_camera module
+-----------------------------------------
 
-.. automodule:: server.tests.test_imager
+.. automodule:: server.tests.test_dummy_camera
     :members:
     :undoc-members:
     :show-inheritance:

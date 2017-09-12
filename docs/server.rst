@@ -35,6 +35,14 @@ server\.meta\_server module
     :undoc-members:
     :show-inheritance:
 
+server\.pepi\_thrift\_loader module
+-----------------------------------
+
+.. automodule:: server.pepi_thrift_loader
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 server\.stream module
 ---------------------
 

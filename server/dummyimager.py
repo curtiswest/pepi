@@ -1,17 +1,17 @@
 """
-An implementation of `MetaImager` that generates random images of RGB noise for debugging purposes.
+An implementation of `MetaCamera` that generates random images of RGB noise for debugging purposes.
 """
 import numpy as np
 
-from server import MetaImager
+from server import MetaCamera
 
 
-class DummyImager(MetaImager):
+class DummyCamera(MetaCamera):
     """
-    `DummyImager` is a `MetaImager` that generates random images of RGB noise.
+    `DummyImager` is a `MetaCamera` that generates random images of RGB noise.
     """
     def __init__(self, resolution=(1920, 1080)):
-        super(DummyImager, self).__init__()
+        super(DummyCamera, self).__init__()
         self.resolution = resolution
 
     @staticmethod

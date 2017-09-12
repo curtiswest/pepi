@@ -15,7 +15,7 @@ else:
 
 
 # noinspection PyMethodMayBeStatic
-class MetaServerContract(object):
+class MetaCameraServerContract(object):
     @pytest.fixture(scope="module")
     def server(self):
         raise NotImplementedError('You must override the @pytest.fixture `server`')
@@ -43,7 +43,7 @@ class MetaServerContract(object):
         data_code = 'my_data_code'
         server.start_capture(data_code)
         time.sleep(1)
-        jpg_strings = server.retrieve_still_jpgs(data_code)
+        jpg_strings = server.retrieve_stills_jpg(data_code)
 
         assert isinstance(jpg_strings, list)
         assert all([isinstance(image, binary_type) for image in jpg_strings])
@@ -57,9 +57,9 @@ class MetaServerContract(object):
 
     def test_image_unavailable(self, server):
         with pytest.raises(ImageUnavailable):
-            server.retrieve_still_jpgs('not_a_real_data_code')
+            server.retrieve_stills_jpg('not_a_real_data_code')
         with pytest.raises(ImageUnavailable):
-            server.retrieve_still_pngs('not_a_real_data_code')
+            server.retrieve_stills_png('not_a_real_data_code')
 
     def test_capturing_to_pngs(self, server):
         import time
@@ -67,7 +67,7 @@ class MetaServerContract(object):
         data_code = 'my_data_code'
         server.start_capture(data_code)
         time.sleep(1)
-        png_strings = server.retrieve_still_pngs(data_code)
+        png_strings = server.retrieve_stills_png(data_code)
 
         assert isinstance(png_strings, list)
         assert all([isinstance(image, binary_type) for image in png_strings])
@@ -90,6 +90,6 @@ class MetaServerContract(object):
         assert result['stream_urls'] == []
         assert result['shutdown'] == []
         assert 'start_capture' in result
-        assert 'retrieve_still_jpgs' in result
-        assert 'retrieve_still_pngs' in result
+        assert 'retrieve_stills_jpg' in result
+        assert 'retrieve_stills_png' in result
         assert 'enumerate_methods' in result

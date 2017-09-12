@@ -1,19 +1,4 @@
-import os
-import sys
 from abc import ABCMeta, abstractmethod
-
-import thriftpy
-
-suffix = '/poc.thrift'
-prefix = os.path.abspath('.')
-
-if not os.path.isfile(prefix+suffix):
-    while not os.path.isfile(prefix+suffix):
-        if prefix == '/':
-            print('Could not find {} in parent folders'.format(suffix))
-            sys.exit([1])
-        prefix, _ = os.path.split(prefix)
-poc_thrift = thriftpy.load('{}/poc.thrift'.format(prefix), module_name='poc_thrift')
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
@@ -22,20 +7,18 @@ __maintainer__ = 'Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'
 
-ImageUnavailable = poc_thrift.ImageUnavailable
 
-
-class MetaImager(object):
+class MetaCamera(object):
     """
-    MetaImager is an abstract base class that defines the interface
-    required from an Imager. Imagers are used to capture imagery
+    MetaCamera is an abstract base class that defines the interface
+    required from an Camera. Cameras are used to capture imagery
     from its associated device in a consistent format. This allows
-    various concrete implementations of Imager to obtain imagery from
+    various concrete implementations of MetaCamera to obtain imagery from
     different sources, such as different USB webcams, DSLRs and embedded
     cameras, etc.
 
-    A Imager subclasses MetaImagingServer *must* implement all methods marked
-    with @abstractmethod.
+    A concrete Camera subclasses MetaCamera and *must* implement all methods
+    marked with @abstractmethod.
     """
     __metaclass__ = ABCMeta
 
@@ -97,7 +80,7 @@ class MetaImager(object):
 
     def stop_streaming(self):
         """
-        If this Imager is currently streaming, stop the stream.
+        If this Camera is currently streaming, stop the stream.
 
         :return: None
         """
@@ -105,35 +88,35 @@ class MetaImager(object):
             self._streaming_thread = None
 
 
-class MetaImagingServer(object):
+class MetaCameraServer(object):
     """
-    MetaImagingServer is an abstract base class that defines the interface
-    required from an ImagingServer. ImagingServers are used in with the
+    MetaCameraServer is an abstract base class that defines the interface
+    required from an CameraServer. CameraServers are used in with the
     Apache Thrift protocol to provide RPC mechanisms, allowing remote control
     the server.
 
-    An ImagingServer subclassing MetaImagingServer *must* implement all methods
-    marked with @abstractmethod below in a manner that is consistent with their
-    documentation and type annotations. Failure to do so will make compatibility
-    between different ImagingServers and clients near-impossible or at the very
+    A concrete CameraServer subclassing MetaCameraServer *must* implement all
+    methods marked with @abstractmethod below in a manner that is consistent with
+    their documentation and type annotations. Failure to do so will make compatibility
+    between different CameraServer and clients near-impossible or at the very
     least, fragile and unstable.
 
-    An ImagingServer's use-case is to provide a server through which a
-    MetaImager may be controlled in a consistent manner. This allows for client's
-    to seamlessly connect to many implementations of MetaImagingServer's, each
-    possibly using different MetaImager's to obtain imagery.
+    A CameraServer's use-case is to provide a server through which a
+    MetaCamera implementation may be controlled in a consistent manner. This allows
+    for client's to seamlessly connect to many implementations of MetaCameraServer's,
+    each possibly using different Cameras's to obtain imagery.
 
-    A MetaImagingServer is not, however, *required* to use a MetaImager, but is
+    A MetaCameraServer is not, however, *required* to use a MetaCamera, but is
     a suggestion for maintaining compatibility.
 
-    A MetaImagingServer implementations may use multiple connected cameras, that
+    A MetaCamera implementations may use multiple connected cameras, that
     are transparent to the connecting client. In this case, you should return a
     list of encoded images.
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, imagers):
-        self.imagers = imagers
+    def __init__(self, cameras):
+        self.cameras = cameras
 
     @abstractmethod
     def ping(self):
@@ -181,7 +164,7 @@ class MetaImagingServer(object):
     def start_capture(self, data_code):
         # type: (str) -> None
         """
-        Immediately starts the process of capturing from this server's Imager(s),
+        Immediately starts the process of capturing from this server's Camera(s),
         and stores the captured data under the given unique data_code.
 
         Note: the received `data_code` may be assumed to be unique. Implementations may choose to implement more
@@ -193,7 +176,7 @@ class MetaImagingServer(object):
         pass
 
     @abstractmethod
-    def retrieve_still_pngs(self, with_data_code):
+    def retrieve_stills_png(self, with_data_code):
         # type: (str) -> [str]
         """
         Retrieves the images stored under `with_data_code`, if they exists, and
@@ -206,7 +189,7 @@ class MetaImagingServer(object):
         pass
 
     @abstractmethod
-    def retrieve_still_jpgs(self, with_data_code):
+    def retrieve_stills_jpg(self, with_data_code):
         # type: (str) -> [str]
         """
         Retrieves the images stored under `with_data_code`, if they exists, and

@@ -14,8 +14,8 @@ except ImportError:
 import thriftpy
 from thriftpy.rpc import client_context
 import thriftpy.transport
+from server.pepi_thrift_loader import pepi_thrift
 
-poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
 logging.basicConfig(level=logging.INFO)
 
 __author__ = 'Curtis West'
@@ -99,7 +99,7 @@ class Heartbeater(threading.Thread):
     def ping_server_at_ip(ip):
         # type: (str) -> (str, bool)
         try:
-            with client_context(poc_thrift.ImagingServer, ip, 6000, connect_timeout=300, socket_timeout=1000) as c:
+            with client_context(pepi_thrift.CameraServer, ip, 6000, connect_timeout=300, socket_timeout=1000) as c:
                 ping_result = c.ping()
         except thriftpy.transport.TTransportException:
             return ip, False

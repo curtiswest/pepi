@@ -1,19 +1,19 @@
 import pytest
 
-from server.tests import MetaServerContract, MetaServerOverThrift
-from raspi_server.raspi_server import RaspPiImagingServer
-from server.dummyimager import DummyImager
+from server.tests import MetaCameraServerContract, MetaCameraServerOverThrift
+from raspi_server.raspi_server import RaspPiCameraServer
+from server.dummyimager import DummyCamera
 
 
-class TestRaspiServer(MetaServerContract):
+class TestRaspiCameraServer(MetaCameraServerContract):
     @pytest.fixture(scope="module")
     def server(self):
-        return RaspPiImagingServer(imagers=[DummyImager(resolution=(4, 3)), DummyImager(resolution=(4, 3))],
-                                   stream=False)
+        return RaspPiCameraServer(cameras=[DummyCamera(resolution=(4, 3)), DummyCamera(resolution=(4, 3))],
+                                  stream=False)
 
 
-class TestRaspiServerOverThrift(MetaServerOverThrift):
+class TestRaspiServerOverThrift(MetaCameraServerOverThrift):
     @pytest.fixture(scope="module")
     def local_server(self):
-        return RaspPiImagingServer(imagers=[DummyImager(resolution=(4, 3)), DummyImager(resolution=(4, 3))],
-                                   stream=False)
+        return RaspPiCameraServer(cameras=[DummyCamera(resolution=(4, 3)), DummyCamera(resolution=(4, 3))],
+                                  stream=False)

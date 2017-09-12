@@ -8,9 +8,9 @@ Once you've got your servers installed and running, and your client launches cor
 
 Open your browser and browse to `<http://0.0.0.0:5000/>`_. You'll see the PEPI interface:
 
-   .. image:: images/using-pepi/ui.png
-      :align: center
-      :alt: A screenshot of the clients-side software's user interface.
+.. image:: images/using-pepi/ui.png
+   :align: center
+   :alt: A screenshot of the clients-side software's user interface.
 
 Hopefully you'll find that the buttons are relatively self-explanatory for the most part.
 
@@ -52,7 +52,7 @@ The `Download All` button requests all captured images from the server as JPEGs.
 
 .. image:: images/using-pepi/download.png
    :align: center
-   :alt: A screenshot of a file explorer after pressing the Download button, showing downloaded images. 
+   :alt: A screenshot of a file explorer after pressing the Download button, showing downloaded images.
 
 The images are saved with the following naming notation:
 

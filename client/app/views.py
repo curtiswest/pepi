@@ -15,9 +15,7 @@ from flask import render_template, flash, url_for, request, redirect
 
 from app import app
 sys.path.append('../')
-from server import ImageUnavailable
-
-poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
+from server import ImageUnavailable, pepi_thrift
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
@@ -68,7 +66,7 @@ def find_server_by(servers, id_=None, ip=None):
 
 def capture(all_servers, server_id):
     def _capture_single(server_):
-        with client_context(poc_thrift.ImagingServer, server['ip'], 6000) as c:
+        with client_context(pepi_thrift.CameraServer, server['ip'], 6000) as c:
             app.server_data[server_['id']].append(str(app.capture_no))
             c.start_capture(str(app.capture_no))
 
@@ -93,10 +91,10 @@ def download_images(all_servers):
 
     for id_ in server_data:
         server = find_server_by(all_servers, id_=id_)
-        with client_context(poc_thrift.ImagingServer, server['ip'], 6000, socket_timeout=10000) as c:
+        with client_context(pepi_thrift.CameraServer, server['ip'], 6000, socket_timeout=10000) as c:
             for data_code in server_data[id_]:
                 try:
-                    images = c.retrieve_still_jpgs(data_code)
+                    images = c.retrieve_stills_jpg(data_code)
                 except ImageUnavailable as e:
                     logging.warn(e)
                     downloaded_images[id_].append(data_code)
@@ -104,7 +102,8 @@ def download_images(all_servers):
                     downloaded_images[id_].append(data_code)
                     for count, image in enumerate(images):
                         logging.info('Received data_code {}. Image length: {} bytes'.format(data_code, len(image)))
-                        out_file = open('{}/id{}_d{}_cam{}.jpeg'.format(image_dir, server['id'], data_code, count), 'wb')
+                        out_file = open('{}/id{}_d{}_cam{}.jpeg'.format(image_dir, server['id'], data_code, count),
+                                        'wb')
                         out_file.write(image)
                         out_file.close()
 
@@ -112,15 +111,13 @@ def download_images(all_servers):
         [server_data[id_].remove(data_code) for data_code in data_code_list]
     app.server_data = server_data
     logging.info('Client expected data codes now: {}'.format(app.server_data))
-    # [server_data[id_].remove(data_code) for id_, data_code in iteritems(downloaded_images)]
-    # app.server_data = server_data
 
 
 def identify_servers(servers):
     out_servers = []
     for ip in servers:
         try:
-            with client_context(poc_thrift.ImagingServer, ip, 6000, socket_timeout=2500) as c:
+            with client_context(pepi_thrift.CameraServer, ip, 6000, socket_timeout=2500) as c:
                 stream_urls = c.stream_urls()
                 # TODO: add multi-camera support for more than 1 stream per server
                 stream_url = stream_urls[0] if stream_urls else []
@@ -135,7 +132,7 @@ def identify_servers(servers):
 
 def shutdown(all_servers, server_id):
     def _shutdown_single(server_):
-        with client_context(poc_thrift.ImagingServer, server_['ip'], 6000) as c:
+        with client_context(pepi_thrift.CameraServer, server_['ip'], 6000) as c:
             c.shutdown()
 
     if server_id != 'all':

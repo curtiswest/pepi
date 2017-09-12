@@ -1,6 +1,5 @@
-API - Index
-===========
-You can access the reference documentation for PEPI's modules and packages below.
+pepi
+====
 
 .. toctree::
    :maxdepth: 4

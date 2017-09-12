@@ -4,10 +4,10 @@ raspi\_server package
 Submodules
 ----------
 
-raspi\_server\.raspi\_imager module
+raspi\_server\.raspi\_camera module
 -----------------------------------
 
-.. automodule:: raspi_server.raspi_imager
+.. automodule:: raspi_server.raspi_camera
     :members:
     :undoc-members:
     :show-inheritance:
