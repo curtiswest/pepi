@@ -28,6 +28,10 @@ __status__ = 'Development'
 
 
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+    """
+    A multi-threaded HTTP server, i.e. creates a new thread to respond
+    to each connection, so multiple connections can coexist. 
+    """
     allow_reuse_address = True
     daemon_threads = True
 
@@ -55,10 +59,19 @@ class MJPGStreamer(object):
         server.timeout = 5
 
         def handle_request_loop():
+            """
+            Handles requests on the server forever (used as a threading target).
+            :return: None
+            """
             while True:
                 server.handle_request()
 
         def cleanup():
+            """
+            Cleans up the streamer by deleting any reference to its threads so the
+            daemon mode will stop them.
+            :return:
+            """
             self.server_thread = None
 
         atexit.register(cleanup)
@@ -146,12 +159,20 @@ class MJPGStreamer(object):
         """
 
         class MJPGStreamHandler(BaseHTTPRequestHandler, object):
+            """
+            MJPGStreamHandler handles HTTP requests for the MJPGStream by
+            formatting the JPEGs files provided by a MJPGStreamer.jpeg_image_generator
+            in the proper format for a HTTP MJPEG stream.
+            """
             def __init__(self, *args, **kwargs):
                 self.img_path = img_path
                 super(MJPGStreamHandler, self).__init__(*args, **kwargs)
 
             # noinspection PyPep8Naming
             def do_GET(self):
+                """
+                Responds to a GET request to this handler.
+                """
                 if self.path.endswith('.mjpg') or self.path.endswith('.mjpeg'):
                     self.send_response(200)
                     self.send_header('Content-type', b'multipart/x-mixed-replace; boundary=frame')

@@ -11,8 +11,8 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.DEBUG)
     handler = RaspPiCameraServer(cameras=[RaspPiCamera()], stream=True)
-    server = make_server(pepi_thrift.CameraServer, handler, '0.0.0.0', 6000)
+    rpi_server = make_server(pepi_thrift.CameraServer, handler, '0.0.0.0', 6000)
     logging.info('Starting RaspPiCameraServer')
 
-    server.daemon = True
-    server.serve()
+    rpi_server.daemon = True
+    rpi_server.serve()

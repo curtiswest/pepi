@@ -43,6 +43,9 @@ class MetaCamera(object):
         Note: this method should come at a lower priority than the `still` method, i.e. if a `still()` method call comes
         in, it should be capture immediately rather than for this method even if this means dropping the framerate.
 
+        The implementation here is not optimised to all cameras, so overriding this method is suggested if
+        you have a better method to get low-res images quickly from this MetaCamera.
+
         :param path: path to save the images to
         :param max_framerate: maximum framerate to capture the image at. Note that implementations may have a
                               (significantly) lower framerate
@@ -53,6 +56,11 @@ class MetaCamera(object):
         from PIL import Image
 
         class StreamingThread(threading.Thread):
+            """
+            Starts a thread that will call the given `capture_method` method
+            at least once every 1/`max_framerate` seconds and saves them to
+            the given `path_` folder, for another thread to pick up on and use.
+            """
             def __init__(self, capture_method, path_, max_framerate_=1, resolution_=(640, 480)):
                 self.capture_method = capture_method
                 self.path = path_
@@ -64,6 +72,9 @@ class MetaCamera(object):
                 self.start()
 
             def run(self):
+                """
+                Executes the capture within the given `max_framerate`..
+                """
                 last_time = time.time()
                 while True:
                     if time.time() > (last_time + (1 / max_framerate)):

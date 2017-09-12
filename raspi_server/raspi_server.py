@@ -27,6 +27,10 @@ __status__ = 'Development'
 
 
 class RaspPiCameraServer(MetaCameraServer):
+    """
+    An implementation of a MetaCameraServer for a Raspberry Pi
+    that supports any implementation of MetaCamera
+    """
 
     StreamInfo = collections.namedtuple('StreamInfo', 'port, folder, streamer')
     STREAM_PORT = 6001
@@ -48,6 +52,11 @@ class RaspPiCameraServer(MetaCameraServer):
                 imager.stream_jpg_to_folder(folder_)
 
         def cleanup():
+            """
+            Cleans up after this server by destroying connected cameras
+            and their streams, and erasing the stored images. 
+            :return:
+            """
             logging.info('Cleaning up RaspPiCameraServer')
             self._stored_captures = None
             self.cameras = None

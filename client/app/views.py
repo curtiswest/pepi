@@ -57,6 +57,13 @@ def open_images_folder():
 
 
 def find_server_by(servers, id_=None, ip=None):
+    """
+    Returns a server from the dictionary of servers that matches either the given `id_` or `ip.
+    :param servers: a list of dictionaries of servers, with each being {id: id, ip: ip}
+    :param id_: the id_ to match a server against
+    :param ip: the ip to match a server against
+    :return: the dictionary entry if a serve matches, None otherwise
+    """
     for server in servers:
         if server['id'] == id_ or server['ip'] == ip:
             return server
@@ -64,7 +71,15 @@ def find_server_by(servers, id_=None, ip=None):
         return None
 
 
-def capture(all_servers, server_id):
+def capture(all_servers, server_id='all'):
+    """
+    Sends the capture commands to the server given in `server_id` from the list
+    of given servers (`all_servers`), else sends the capture command to all of
+    the servers in `all_servers`.
+    :param all_servers: a list of dictionaries of servers, with each being {id: id, ip: ip}
+    :param server_id: the server_id to send to, or `all` for all servers
+    :return: None
+    """
     def _capture_single(server_):
         with client_context(pepi_thrift.CameraServer, server['ip'], 6000) as c:
             app.server_data[server_['id']].append(str(app.capture_no))
@@ -85,6 +100,12 @@ def capture(all_servers, server_id):
 
 
 def download_images(all_servers):
+    """
+    Downloads all known images from servers in `all_servers` based on what the client has stored into a
+    timestamped folder under '/images'.
+    :param all_servers: a list of dictionaries of servers, with each being {id: id, ip: ip}
+    :return: None
+    """
     image_dir = get_image_dir()
     downloaded_images = collections.defaultdict(list)
     server_data = app.server_data.copy()
@@ -114,6 +135,12 @@ def download_images(all_servers):
 
 
 def identify_servers(servers):
+    """
+    Gets the identifier information about each server in the given `servers`
+    dictionary, including its ID and stream urls and returns it as a list of dicts.
+    :param servers: a list of IPs where servers are known to exist
+    :return: a list of dictionaries containing {server_id: {ip: ip, id: id:, stream_url: stream_url}
+    """
     out_servers = []
     for ip in servers:
         try:
@@ -131,6 +158,13 @@ def identify_servers(servers):
 
 
 def shutdown(all_servers, server_id):
+    """
+    Shuts down the server given by `server_id` from the `all_servers` list, or if server_id
+    is given as `all, shuts down all servers in the `all_servers` list.
+    :param all_servers: a list of dictionaries of servers, with each being {id: id, ip: ip}
+    :param server_id:
+    :return:
+    """
     def _shutdown_single(server_):
         with client_context(pepi_thrift.CameraServer, server_['ip'], 6000) as c:
             c.shutdown()
@@ -150,6 +184,11 @@ def shutdown(all_servers, server_id):
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/setup/', methods=['GET', 'POST'])
 def index():
+    """
+    Displays a the main setup screen for PEPI and handles the button presses
+    which call the above functions.
+    :return: rendered Flask template.
+    """
     # Get servers
     servers = identify_servers(app.heartbeater.ip_set.copy())
 
@@ -191,12 +230,20 @@ def index():
 
 @app.route('/setup')
 def configure(server_id):
+    """
+    Not implemented, but will be used to configure cameras.
+    :return: rendered Flask template.
+    """
     logging.warn('Got config for {} but config not yet implemented'.format(server_id))
     return render_template('/setup.html')
 
 
 @app.route('/stream', methods=['GET'])
 def stream():
+    """
+    Displays a full-screen stream for the given server.
+    :return: rendered Flask template.
+    """
     server_id = request.args.get('server_id')
     stream_url = request.args.get('stream_url')
     print('stream_url: {}'.format(stream_url))

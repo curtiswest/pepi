@@ -32,7 +32,12 @@ class RaspPiCamera(MetaCamera):
         self.folder_capture_thread = None
 
         def cleanup(self):
-            logging.info('Closing camera from RPICameraImager..')
+            """
+            Cleans up the camera by closing the connection to the camera.
+            :param self: a RaspPiCamera object
+            :return: None
+            """
+            logging.info('Closing camera from RaspPiCamera..')
             self.camera.close()
             logging.info('Camera closed')
 

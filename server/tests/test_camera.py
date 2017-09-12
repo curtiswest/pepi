@@ -10,9 +10,29 @@ from PIL import Image
 
 # noinspection PyMethodMayBeStatic
 class MetaCameraContract(object):
+    """
+    Tests a Camera object against the defined Camera contract,
+    essentially proving that it is compatible with all servers
+    that use this defined contract. It uses a PyTest fixture
+    which you must override to use.
+
+    :Example:
+
+        class MyCamera(MetaCamera):
+            def init():
+                self._camera = MagicalCamera()
+
+            def still():
+                return self._camera.capture()
+
+        class TestMyCamera(MetaCameraContract):
+            @pytest.fixture(scope="module")
+            def camera(self):
+                return MyCamera()
+    """
     @pytest.fixture(scope="module")
     def camera(self):
-        raise NotImplementedError('You must override the @pytest.fixture `camera`')
+        raise NotImplementedError('You must override the @pytest.fixture `camera` with a MetaCamera')
 
     def test_still(self, camera):
         image = camera.still()

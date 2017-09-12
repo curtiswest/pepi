@@ -73,6 +73,10 @@ class ThreadPool(object):
 
 
 class Heartbeater(threading.Thread):
+    """
+    Heartbeater scans all IP's within the subnet of the given `based_ip` for the existence of PEPI camera servers. It
+    will only complete the scan at most once ever `min_interval` seconds.
+    """
     def __init__(self, min_interval, base_ip):
         # type: (int, str) -> None
         base_ip = base_ip.rstrip()

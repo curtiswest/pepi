@@ -5,6 +5,11 @@ from server import IPTools
 
 # noinspection PyAttributeOutsideInit,PyPep8
 class TestIPTools(object):
+    """
+    Unit tests for IPTools module, mainly checking that it
+    extracts the correct IPs from the netifaces package
+    and that they are correctly formatted.
+    """
     def test_current_ip(self, monkeypatch):
         def mock_netifaces_ifaddrs(_):
             if self.first_mock_netifaces:
