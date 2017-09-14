@@ -1,5 +1,6 @@
 from .iptools import IPTools
-from .meta_server import MetaCamera, MetaCameraServer
+from .base_camera_server import BaseCameraServer
+from .abstract_camera import AbstractCamera
 from .stream import MJPGStreamer
 from .dummyimager import DummyCamera
 from .pepi_thrift_loader import pepi_thrift, ImageUnavailable

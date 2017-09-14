@@ -14,6 +14,7 @@ Table of Contents
    installation
    using-pepi
    extending-pepi
+   testing
    modules
 
 Indices and Tables

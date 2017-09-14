@@ -11,26 +11,31 @@ import io
 from picamera import *
 from picamera.array import PiYUVArray
 
-from server import MetaCamera
+from server import AbstractCamera
 
 
-class RaspPiCamera(MetaCamera):
+class RaspPiCamera(AbstractCamera):
     """
-    RPiCamera is an camera that uses the Raspberry Pi Camera Module v1/v2 to obtain imagery. It is capable of
-    taking pictures in various resolutions, but defaults to the maximum resolution of 2592x1944. It essentially
-    serves as a convenient wrapper around PiCamera, but in the PEPI format.
+    RaspPiCamera is a ``Camera`` that uses the Raspberry Pi Camera Module
+    v1/v2 to obtain imagery. It is capable of taking pictures in various
+    resolutions, but defaults to the maximum resolution of 2592x1944.
+    It essentially serves as a convenient wrapper around PiCamera, but
+    in the PEPI format.
     """
+
+    SUPPORTS_STREAMING = True
 
     def __init__(self, resolution=(2592, 1944)):
         # type: ((int, int)) -> None
         super(RaspPiCamera, self).__init__()
         self.camera = PiCamera()
-        self.req_reso = resolution
-        self.camera.resolution = self.req_reso
+        self.req_resolution = resolution
+        self.camera.resolution = self.req_resolution
         self.camera.start_preview()
         self.lock = threading.RLock()
         self.folder_capture_thread = None
 
+        # noinspection PyShadowingNames
         def cleanup(self):
             """
             Cleans up the camera by closing the connection to the camera.
@@ -66,7 +71,7 @@ class RaspPiCamera(MetaCamera):
                 start = time.time()
                 rgb = stream.rgb_array
                 logging.debug('RGB conversion took: {}'.format(time.time() - start))
-                return rgb[:self.req_reso[0]][:self.req_reso[1]]
+                return rgb[:self.req_resolution[0]][:self.req_resolution[1]]
 
     def stream_jpg_to_folder(self, path_, max_framerate=5, resolution=(640, 480)):
         class SplitFrames(object):
@@ -86,7 +91,6 @@ class RaspPiCamera(MetaCamera):
                 Writes to the internal buffer. If a JPG magic number is received, dump to disk in the
                 given path.
                 :param buf: bytes to write
-                :return: None
                 """
                 if buf.startswith(b'\xff\xd8'):
                     # Start of new frame; close the old one (if any) and open a new output
@@ -101,5 +105,5 @@ class RaspPiCamera(MetaCamera):
 
         output = SplitFrames(save_path=path_)
         self.camera.framerate = max_framerate
-        self.camera.resolution = self.req_reso
+        self.camera.resolution = self.req_resolution
         self.camera.start_recording(output, 'mjpeg', resize=resolution)

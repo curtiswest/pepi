@@ -3,10 +3,10 @@ An implementation of `MetaCamera` that generates random images of RGB noise for 
 """
 import numpy as np
 
-from server import MetaCamera
+from server import AbstractCamera
 
 
-class DummyCamera(MetaCamera):
+class DummyCamera(AbstractCamera):
     """
     `DummyImager` is a `MetaCamera` that generates random images of RGB noise.
     """

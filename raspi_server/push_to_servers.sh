@@ -14,7 +14,7 @@ do
 
     #Then push to the server
     echo "Pushing to $line..."
-    rsync -rtz --perms  -e "ssh -i keys/pepi_rsa" .. pi@"$line":/home/pi/pepi
+    rsync -rtz --perms  -e "ssh -i keys/pepi_rsa" .. pi@"$line":/home/pi/pepi --delete
 
     # --exclude=../images ../keys
     #Check if successful push

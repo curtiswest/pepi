@@ -19,7 +19,7 @@ from server import ImageUnavailable, pepi_thrift
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
-__version__ = '2.1'
+__version__ = '3.0'
 __maintainer__ = 'Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'
