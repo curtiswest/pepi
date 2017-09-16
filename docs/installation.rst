@@ -5,7 +5,7 @@ Installation
 ============
 
 .. note::
-  These installation notes are mainly for the provided PEPI implementations, running on the specified :ref:`hardware`. Configurations outside this scope may require different setup steps.
+  These installation notes are mainly for the provided PEPI implementations, running on the specified :ref:`hardware`. Configurations outside this scope may require different setup steps, but will generally have similar steps.
 
 .. _Prerequisites:
 
@@ -14,22 +14,22 @@ Prerequisites
 
 Python
 ------
-The included client and servers use Python 2.6/3.6 or greater. Other versions may work, but are untested. You can check this in your terminal:
+The included client and servers target Python 2.7/3.6 or newer. Other versions may work, but are untested. You can check this in your terminal:
 
-.. code-block:: console
+.. code-block:: shell-session
 
   $ python --version
   Python 2.7.13
   $ python --version
   Python 3.6.1
 
-If you have an old version, or you get errors about Python not being recognised, you should follow the `Python Install Guide`_
+If you have an old version, or you get errors about Python not being recognised, you should follow the `Python Install Guide`_.
 
 .. _Python Install Guide: https://wiki.python.org/moin/BeginnersGuide/Download
 
 Raspberry Pi
 ------------
-The provided implementations should run on any Raspberry Pi, but has only been tested on a RPi 3. The OS distro that you use shouldn't matter, but we suggest `Raspbian`_ (or Raspbian Lite for maximum performance). You'll need a microSD card - 8GB is perfect.
+The provided :py:class:`~raspi_server.raspi_server.RaspPiCameraServer` implementation should run on any Raspberry Pi, but has only been tested on a RPi 3. The OS distro that you use shouldn't matter, but we suggest `Raspbian`_ (or Raspbian Lite for maximum performance). You'll need a microSD card - 8GB is perfect.
 
 Unless you plan on plugging a keyboard, mouse and monitor into your Pis, you'll probably be using SSH to control them. It is important to note that, by default, SSH comes **disabled** unless you configure the flash SD card before boot. If you plan on SSH and you're running the Pi's over Wi-fi, you'll need to add your Wi-Fi details to the SD card before boot too.
 
@@ -59,7 +59,7 @@ Configuring Wi-Fi
 
 Camera Module
 -------------
-The included server implementation (:py:mod:`raspi_server`) needs a properly installed and configured Raspberry Pi Camera Module.
+The provided :py:class:`~raspi_server.raspi_server.RaspPiCameraServer` can use any ``Camera`` implementation, but is intended for use with a Raspberry Pi Camera Module. This module needs proper configuration and installation to work.
 
 PiCamera has provided a great `quickstart guide`_ on this process. However, if you are using SSH (ie. a terminal) to connect to your Raspberry Pi, you cannot complete the last steps in that guide as it requires a GUI.
 
@@ -118,7 +118,7 @@ Client Installation
       $ git clone https://github.com/curtiswest/pepi.git
       $ cd pepi
       $ ls
-      LICENSE      README.rst   client       poc.thrift   raspi_server server       test         unittest.cfg
+      LICENSE      README.rst   client       pepi.thrift   raspi_server server       test         unittest.cfg
 
 #. Install the client's Python dependencies:
 
@@ -168,7 +168,7 @@ Firstly, we need to obtain the software:
       $ git clone https://github.com/curtiswest/pepi.git
       $ cd pepi
       $ ls
-      LICENSE      README.rst   client       poc.thrift   raspi_server server       test         unittest.cfg
+      LICENSE      README.rst   client       pepi.thrift   raspi_server server       test         unittest.cfg
 
 Alternatively, if your Pi does not have internet access, you could download a `.zip of the repo` and use a flash drive to transfer it to the Pi.
 

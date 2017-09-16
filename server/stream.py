@@ -79,7 +79,6 @@ class MJPGStreamer(object):
         self.server_thread = threading.Thread(target=handle_request_loop)
         self.server_thread.daemon = True
         self.server_thread.start()
-        print('Serving forever')
 
     @staticmethod
     def newest_file_in_folder(path, delete_old=True):
@@ -100,26 +99,28 @@ class MJPGStreamer(object):
                 logging.warn(e)
         previous = None
         while True:
-            file_list = sorted(glob.glob(path + '/*'), key=os.path.getmtime)
-            if not file_list or len(file_list) < 2:  # pragma: no cover
-                time.sleep(0.1)
+            try:
+                file_list = sorted(glob.glob(path + '/*'), key=os.path.getmtime)
+                if not file_list or len(file_list) < 2:  # pragma: no cover
+                    time.sleep(0.1)
+                    continue
+
+                second_newest = file_list[-2]
+                if second_newest == previous:
+                    time.sleep(0.1)
+                    continue
+
+                previous = second_newest
+                if delete_old:
+                    older_than_second_newest = file_list[0:-3]
+                    for old_file in older_than_second_newest:
+                        try:
+                            os.remove(old_file)
+                        except (IOError, OSError):
+                            pass
+                yield second_newest
+            except Exception as e:
                 continue
-
-            second_newest = file_list[-2]
-            if second_newest == previous:
-                time.sleep(0.1)
-                continue
-
-            previous = second_newest
-            if delete_old:
-                older_than_second_newest = file_list[0:-3]
-                for old_file in older_than_second_newest:
-                    try:
-                        os.remove(old_file)
-                    except (IOError, OSError):
-                        pass
-
-            yield second_newest
 
     @staticmethod
     def jpeg_image_generator(path, quality=85, resolution=(640, 480)):

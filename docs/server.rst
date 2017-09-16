@@ -27,10 +27,10 @@ server\.base\_camera\_server module
     :undoc-members:
     :show-inheritance:
 
-server\.dummyimager module
+server\.dummycamera module
 --------------------------
 
-.. automodule:: server.dummyimager
+.. automodule:: server.dummycamera
     :members:
     :undoc-members:
     :show-inheritance:

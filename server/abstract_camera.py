@@ -1,12 +1,17 @@
-from abc import ABCMeta, abstractmethod
-import threading
-import time
+"""
+abstract_camera.py: Holds the Python definition of a ``Camera`` as defined in ``pepi.thrift``.
+"""
 
-from PIL import Image
+from abc import ABCMeta, abstractmethod
+from io import BytesIO
+
+import typing
+import numpy as np
+from PIL import Image, ImageOps
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
-__version__ = '3.0'
+__version__ = '3.1'
 __maintainer__ = 'Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'
@@ -27,8 +32,6 @@ class AbstractCamera(object):
     """
     __metaclass__ = ABCMeta
 
-    SUPPORTS_STREAMING = True
-
     def __init__(self):
         self._streaming_thread = None
 
@@ -42,69 +45,127 @@ class AbstractCamera(object):
         """
         pass
 
-    def stream_jpg_to_folder(self, path, max_framerate=1, resolution=(640, 480)):
-        # type: (str, int, (int, int)) -> None
+    def low_res_still(self):
+        # type: () -> [[int], [int], [int]]
         """
-        Continuously captures frames to a the given `path` at the given `resolution`,
-        up to the `max_framerate` fps.
+        Captures a still from the camera and returns it as 3-dimensional RGB array representing the image.
 
-        Note: this method should come at a lower priority than the `still` method,
-        i.e. if a `still()` method call comes in, you should try to service it
-        as soon as possible, even if this means compromising the stream.
-
-        The provided implementation here is not optimised to all cameras, so
-        overriding this method is suggested if you have a better method to get
-        low-res images quickly from the physical camera.
-
-        Alternatively, if you do not wish to stream from this server, set
-        ``SUPPORTS_STREAMING`` to False in your class declaration, and then
-        override this method to do nothing.
-
-        :param path: path to save the images to
-        :param max_framerate: `maximum` framerate to capture the image at
-        :param resolution: resolution to save the JPEG images at
+        :return: [[[R, G, B]] NumPy array of Numpy.uint8 0-255 values.
         """
+        return RGBImage(self.still()).low_res
 
-        class StreamingThread(threading.Thread):
-            """
-            Starts a thread that will call the given `capture_method` method
-            at least once every 1/`max_framerate` seconds and saves them to
-            the given `path_` folder, for another thread to pick up on and use.
-            """
-
-            def __init__(self, capture_method, path_, max_framerate_=1, resolution_=(640, 480)):
-                self.capture_method = capture_method
-                self.path = path_
-                self.max_framerate = max_framerate_
-                self.resolution = resolution_
-                self.frame_counter = 0
-                super(StreamingThread, self).__init__()
-                self.daemon = True
-                self.start()
-
-            def run(self):
-                """
-                Executes the capture within the given `max_framerate`..
-                """
-                last_time = time.time()
-                while True:
-                    if time.time() > (last_time + (1 / max_framerate)):
-                        last_time = time.time()
-                        im = Image.fromarray(self.capture_method())
-                        im.thumbnail(self.resolution)
-                        im.save(self.path + '/{}.jpg'.format(self.frame_counter))
-                        self.frame_counter += 1
-                    else:
-                        time.sleep(1 / self.max_framerate / 4)
-
-        self._streaming_thread = StreamingThread(self.still, path_=path, max_framerate_=max_framerate,
-                                                 resolution_=resolution)
-
-    def stop_streaming(self):
+    @abstractmethod
+    def get_max_resolution(self):
+        # type: () -> [int, int]
         """
-        If this Camera is currently streaming, stop the stream.
+        Gets the maximum resolution supported by this camera.
 
-        :return: None
+        :return: a list of length 2 representing the resolution i.e. (x, y)
         """
-        if self._streaming_thread:
-            self._streaming_thread = None
+        pass
+
+    @abstractmethod
+    def get_current_resolution(self):
+        # type: () -> [int, int]
+        """
+        Gets the current resolution of this camera.
+
+        :return: a list of length 2 representing the resolution i.e. (x, y)
+        """
+        pass
+
+    @abstractmethod
+    def set_resolution(self, x, y):
+        # type: (int, int) -> None
+        """
+        If supported, sets the resolution of the camera.
+
+        :param x: the x component of the desired resolution
+        :param y: the x component of the desired resolution
+        """
+        pass
+
+class RGBImage(object):
+    """
+    A utility object to convert images of different formats to RGB arrays
+    """
+
+    @property
+    def array(self):
+        """
+        The array RGB array that represents this RGBImage
+        :return:
+        """
+        return np.array(self._array)
+
+    @array.setter
+    def array(self, value):
+        value = np.array(value)
+        try:
+            Image.fromarray(value)
+        except (TypeError, ValueError, IOError) as e:
+            raise ValueError('Array does not form a valid image: {}'.format(e.message))
+        else:
+            self._array = value
+
+    def __init__(self, array):
+        """
+        Initialises a RGBImage with the given array.
+
+        :raises: ValueError: when the array is malformed for an image
+        :param array: an RGB array
+        """
+        self.array = np.array(array)
+
+    @property
+    def list(self):
+        # type: () -> [[[int, int, int]]]
+        """
+        RGBImage as a native Python list.
+
+        :return: Returns this RGB as a native Python list.
+        """
+        return list(self.array)
+
+    @property
+    def low_res(self):
+        # type: () -> np.ndarray
+        """
+        Returns this RGB image as a numpy array.
+
+        :return: this RGB image as a numpy array
+        """
+        return np.array(ImageOps.fit(Image.fromarray(self.array), size=(640,480)))
+
+    @classmethod
+    def fromstring(cls, string):
+        image_buffer = BytesIO()
+        image_buffer.write(string)
+        image_buffer.seek(0)
+        return cls(array=np.array(Image.open(image_buffer)))
+
+    @classmethod
+    def frombytes(cls, mode, size, bytes_):
+        # type: (str, (int, int), typing.Union[str, bytes] -> RGBImage
+        """
+        Construct a RGBImage from the pixel data in a buffer.
+
+        :param mode: the image mode, see https://pillow.readthedocs.io/en/3.1.x/handbook/concepts.html#concept-modes
+        :param size: the image size
+        :param bytes_: a byte buffer containing raw data for the given mode
+        :raises: ValueError: when the bytes are malformed or not an image
+        :return: RGBImage
+        """
+        return cls(array=np.array(Image.frombytes(mode, size, bytes_)))
+
+    @classmethod
+    def fromfile(cls, file):
+        # type: (typing.Union[BytesIO, str] -> RGBImage
+        """
+        Construct a RGB image from the given file
+
+        :param file: a filename (str) or file object.
+        :raises: ValueError: when the file object is malformed or not an image
+        :return: RGBImage
+        """
+        return cls(array=np.array(Image.open(file)))

@@ -1,3 +1,7 @@
+"""
+base_camera_server.py: Holds the Python implementation of a ``CameraServer`` as defined in ``pepi.thrift``.
+"""
+
 import logging
 import os
 import tempfile
@@ -6,14 +10,49 @@ import uuid
 import collections
 from future.utils import viewitems
 import atexit
+import threading
+import time
+import typing
 
 from PIL import Image
+import numpy as np
 
 from .stream import MJPGStreamer
 from .iptools import IPTools
 from .pepi_thrift_loader import ImageUnavailable
 from .abstract_camera import AbstractCamera
 
+
+class CameraTimelapser(threading.Thread):
+    """
+    CameraTimelapser is a utility class designed to call the
+    ``low_res_still()`` method on a concrete ``AbstractCamera``
+    at a defined rate and save it to a given folder for the
+    purposes of timelapsing or streaming from the camera.
+    """
+    def __init__(self, camera, folder, interval):
+        # type: (AbstractCamera, str, typing.Union[float or int]) -> None
+        super(CameraTimelapser, self).__init__()
+        self.camera = camera
+        self.path = folder
+        self.interval = interval
+        self.daemon = True
+
+        def cleanup(self):
+            self.camera = None
+        atexit.register(cleanup, self)
+
+    def run(self):
+        start = time.time()
+        count = 0
+        while True:
+            if time.time() > (start + self.interval):
+                start = time.time()
+                image = Image.fromarray(np.array(self.camera.low_res_still(), dtype=np.uint8))
+                image.save(self.path + '/{}.jpeg'.format(count))
+                count += 1
+            else:
+                time.sleep(self.interval/2)
 
 # noinspection PyMethodMayBeStatic
 class BaseCameraServer(object):
@@ -53,21 +92,21 @@ class BaseCameraServer(object):
         :param cameras: a list of AbstractCamera objects
         :param stream: True to start streams for all cameras, False to not.
         """
+        # self.cameras = CameraManager(cameras)
         self.cameras = cameras
         self._stored_captures = dict()
         self.streams = dict()
+        self.identifier = str(uuid.uuid4().hex)
 
         if stream:
-            StreamInfo = collections.namedtuple('StreamInfo', 'port, folder, streamer')
+            StreamInfo = collections.namedtuple('StreamInfo', 'port, folder, streamer, capturer')
             for count, camera in enumerate(cameras):
-                if camera.SUPPORTS_STREAMING:
-                    port_ = self.STREAM_PORT + count
-                    folder_ = tempfile.mkdtemp()
-                    streamer_ = MJPGStreamer(folder_, port=port_)
-                    self.streams[camera] = StreamInfo(port=port_, folder=folder_, streamer=streamer_)
-                    camera.stream_jpg_to_folder(folder_)
-                else:
-                    pass
+                port_ = self.STREAM_PORT + count
+                folder_ = tempfile.mkdtemp()
+                streamer_ = MJPGStreamer(folder_, port=port_)
+                capturer = CameraTimelapser(camera=camera, folder=folder_, interval=0.5)
+                capturer.start()
+                self.streams[camera] = StreamInfo(port=port_, folder=folder_, streamer=streamer_, capturer=capturer)
 
         def cleanup():
             """
@@ -99,7 +138,7 @@ class BaseCameraServer(object):
         :return: the server's unique identifier string
         """
         logging.info('identify()')
-        return str(uuid.uuid4().hex)
+        return self.identifier
 
     @staticmethod
     def _current_ip():
@@ -155,7 +194,7 @@ class BaseCameraServer(object):
         # TODO: parallelize capture from all cameras
         for camera in self.cameras:
             try:
-                captures.append(Image.fromarray(camera.still()))
+                captures.append(Image.fromarray(np.array(camera.still(), dtype=np.uint8)))
             except (AttributeError, TypeError, ValueError) as e:
                 logging.warn('Could not construct image from received RGB array: {}'.format(e))
                 continue

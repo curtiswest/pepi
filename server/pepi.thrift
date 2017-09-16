@@ -13,10 +13,45 @@ exception ImageUnavailable {
 }
 
 /*******************************************************************************
+A Camera provides images from a physical camera in the form of RGB arrays.
+*******************************************************************************/
+service Camera {
+  /* still
+   * description: returns a still image capture from the camera at the currently
+   *              set resolution
+   * returns: multidimensional array of row, column, RGB representing the image
+   */
+   list<list<list<i16>>> still()
+
+  /* low_res_still
+   * description: gets a 640 x 480px still from this camera for previewing
+   * returns: multidimensional array of row, column, RGB representing the image
+   */
+   list<list<list<i16>>> low_res_still()
+
+  /* still
+   * description: gets the maximum resolution supported by this camera
+   * returns: a list of length 2 representing the resolution i.e. (x, y)
+   */
+   list<i16> get_max_resolution(),
+
+  /* get_current_resolution
+   * description: gets the current resolution of this camera
+   * returns: a list of length 2 representing the resolution i.e. (x, y)
+   */
+   list<i16> get_current_resolution(),
+
+  /* set_resolution
+   * description: if supported, sets the resolution of the camera
+   */
+   oneway void set_resolution(1:i16 x, 2:i16 y)
+}
+
+/*******************************************************************************
 A CameraServer serves as a wrapper around a camera and provides a number of
 utility functions for managing the server and camera.
 *******************************************************************************/
-service CameraServer{
+service CameraServer {
   /* ping
    * description: Used to ping the server.
    * returns: True, always
@@ -75,7 +110,7 @@ service CameraServer{
                   This is currently not used for any function as of v3,
                   so you may choose to just return an empty dictionary,
                   but be aware that this may change in the future versions.
-   * returns: A dictionary where:
+   * returns: A dictionary with:
                key: method name
                value: a list of argument names that the method takes
    */

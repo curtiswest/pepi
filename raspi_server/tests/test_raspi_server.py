@@ -2,7 +2,7 @@ import pytest
 
 from server.tests import MetaCameraServerContract, MetaCameraServerOverThrift
 from raspi_server.raspi_server import RaspPiCameraServer
-from server.dummyimager import DummyCamera
+from server.dummy_camera import DummyCamera
 
 
 class TestRaspiCameraServer(MetaCameraServerContract):

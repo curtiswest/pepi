@@ -1,15 +1,10 @@
-import numpy
-import os
-import glob
-import time
-import imghdr
-
 import pytest
 from PIL import Image
+import numpy as np
 
 
 # noinspection PyMethodMayBeStatic
-class MetaCameraContract(object):
+class AbstractCameraContract(object):
     """
     Tests a Camera object against the defined Camera contract,
     essentially proving that it is compatible with all servers
@@ -17,47 +12,46 @@ class MetaCameraContract(object):
     which you must override to use.
 
     :Example:
-
-        class MyCamera(MetaCamera):
+        class MyCamera(AbstractCamera):
             def init():
                 self._camera = MagicalCamera()
 
             def still():
                 return self._camera.capture()
 
-        class TestMyCamera(MetaCameraContract):
+            ...
+
+        class TestMyCamera(AbstractCameraContract):
             @pytest.fixture(scope="module")
             def camera(self):
                 return MyCamera()
     """
     @pytest.fixture(scope="module")
     def camera(self):
-        raise NotImplementedError('You must override the @pytest.fixture `camera` with a MetaCamera')
+        raise NotImplementedError('You must override the @pytest.fixture `camera` '
+                                  'with a concreteAbstractCamera')
 
     def test_still(self, camera):
         image = camera.still()
-        assert isinstance(image, numpy.ndarray)
+        Image.fromarray(np.array(image, dtype=np.uint8))
         for x in image:
             for y in x:
                 assert all([0 <= c <= 255 for c in y])
 
-    def test_stream_jpg_to_folder(self, camera, tmpdir):
-        path = str(tmpdir)
-        camera.stream_jpg_to_folder(path)
-        time.sleep(3)
-        camera.stop_streaming()
+    def test_low_res_still(self, camera):
+        image = camera.low_res_still()
+        pil_image = Image.fromarray(np.array(image, dtype=np.uint8))
+        assert pil_image.size == (640, 480)
+        for x in image:
+            for y in x:
+                assert all([0 <= c <= 255 for c in y])
 
-        for file_ in glob.glob(path + '/*'):
-            name, extension = os.path.splitext(file_)
-            assert extension == '.jpg' or extension == '.jpeg'
-            assert imghdr.what(file_) == 'jpeg'
-            try:
-                image = Image.open(file_)
-                assert image.format == 'JPEG'
-            except IOError as e:
-                pytest.fail('Couldn\'t open the image (malformed?) at file {}. Exception : {}'.format(file_, e), True)
-
-    def test_stopping_thread(self, camera):
-        camera.stop_streaming()
-        time.sleep(0.5)
-        camera.stop_streaming()
+    def test_resolutions(self, camera):
+        max_resolution = camera.get_max_resolution()
+        assert len(max_resolution) == 2
+        camera.set_resolution(x=1280, y=720)
+        updated_resolution = camera.get_current_resolution()
+        assert len(updated_resolution) == 2
+        assert camera.get_max_resolution() == max_resolution
+        image = Image.fromarray(np.array(camera.still(), dtype=np.uint8))
+        assert updated_resolution == list(image.size)

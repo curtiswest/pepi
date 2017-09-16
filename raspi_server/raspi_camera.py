@@ -6,17 +6,22 @@ import threading
 import time
 import atexit
 import logging
-import io
 
 from picamera import *
-from picamera.array import PiYUVArray
+from picamera.array import PiRGBArray
 
 from server import AbstractCamera
 
+__author__ = 'Curtis West'
+__copyright__ = 'Copyright 2017, Curtis West'
+__version__ = '3.1'
+__maintainer__ = 'Curtis West'
+__email__ = 'curtis@curtiswest.net'
+__status__ = 'Development'
 
 class RaspPiCamera(AbstractCamera):
     """
-    RaspPiCamera is a ``Camera`` that uses the Raspberry Pi Camera Module
+    RaspPiCamera is a concrete ``AbstractCamera`` that uses the Raspberry Pi Camera Module
     v1/v2 to obtain imagery. It is capable of taking pictures in various
     resolutions, but defaults to the maximum resolution of 2592x1944.
     It essentially serves as a convenient wrapper around PiCamera, but
@@ -24,16 +29,17 @@ class RaspPiCamera(AbstractCamera):
     """
 
     SUPPORTS_STREAMING = True
+    MAX_RESOLUTION = (2592, 1944)
 
-    def __init__(self, resolution=(2592, 1944)):
+    def __init__(self, resolution=MAX_RESOLUTION):
         # type: ((int, int)) -> None
         super(RaspPiCamera, self).__init__()
         self.camera = PiCamera()
         self.req_resolution = resolution
         self.camera.resolution = self.req_resolution
         self.camera.start_preview()
+        self.camera.framerate = 30
         self.lock = threading.RLock()
-        self.folder_capture_thread = None
 
         # noinspection PyShadowingNames
         def cleanup(self):
@@ -56,54 +62,29 @@ class RaspPiCamera(AbstractCamera):
         with self.lock:
             # Lock is necessary on the camera because this method can be called from different threads with
             # reference to this Imager, but the camera is not thread-safe.
-
-            # FIXME: get direct RGB array out of camera (see below note)
-            # Below, YUV camera mode is used. This is due to an apparent incompatibility between recording and
-            # capturing from the video port at different resolutions, with a resizer thrown in the mix too.
-            # The conversion from YUV -> RGB array is very, very slow (~ 5 sec, vs 0.4 sec to capture) and so
-            # would ideally be addressed somehow. The best case would be to use the `format='rgb'` parameter
-            # when capturing, but testing shows that this results an ENOMEM error - again, something to do with
-            # capturing/recording at the same time.
-            with PiYUVArray(self.camera) as stream:
+            with PiRGBArray(self.camera) as stream:
                 start = time.time()
-                self.camera.capture(stream, format='yuv', use_video_port=True)
-                logging.debug('Capture took: {}'.format(time.time() - start))
+                self.camera.capture(stream, format='rgb', use_video_port=False)
+                logging.debug('Full-res capture took: {}'.format(time.time() - start))
+                return stream.array
+
+    def low_res_still(self):
+        with self.lock:
+            old_resolution = self.camera.resolution
+            self.camera.resolution = (640, 480)
+            with PiRGBArray(self.camera) as stream:
                 start = time.time()
-                rgb = stream.rgb_array
-                logging.debug('RGB conversion took: {}'.format(time.time() - start))
-                return rgb[:self.req_resolution[0]][:self.req_resolution[1]]
+                self.camera.capture(stream, format='rgb', use_video_port=True)
+                logging.debug('Low-res capture took : {}'.format(time.time() - start))
+                self.camera.resolution = old_resolution
+                return stream.array
 
-    def stream_jpg_to_folder(self, path_, max_framerate=5, resolution=(640, 480)):
-        class SplitFrames(object):
-            """
-            Class based on class from PiCamera's documentation:
-            https://picamera.readthedocs.io/en/release-1.13/recipes2.html?#rapid-capture-and-streaming
-            """
+    def get_current_resolution(self):
+        return self.camera.resolution
 
-            def __init__(self, save_path):
-                # type: (str) -> None
-                self.frame_num = 0
-                self.output = None
-                self.save_path = save_path
+    def get_max_resolution(self):
+        return self.MAX_RESOLUTION
 
-            def write(self, buf):
-                """
-                Writes to the internal buffer. If a JPG magic number is received, dump to disk in the
-                given path.
-                :param buf: bytes to write
-                """
-                if buf.startswith(b'\xff\xd8'):
-                    # Start of new frame; close the old one (if any) and open a new output
-                    if self.output:
-                        self.output.close()
-                    self.frame_num += 1
-                    self.output = io.open(self.save_path + '/image%02d.jpg' % self.frame_num, 'wb')
-                self.output.write(buf)
-
-        if self.camera.recording:
-            self.camera.stop_recording()
-
-        output = SplitFrames(save_path=path_)
-        self.camera.framerate = max_framerate
-        self.camera.resolution = self.req_resolution
-        self.camera.start_recording(output, 'mjpeg', resize=resolution)
+    def set_resolution(self, x, y):
+        with self.lock:
+            self.camera.resolution = [x, y]

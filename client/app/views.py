@@ -112,6 +112,9 @@ def download_images(all_servers):
 
     for id_ in server_data:
         server = find_server_by(all_servers, id_=id_)
+        if not server:
+            downloaded_images[id_].extend(server_data[id_])
+            continue
         with client_context(pepi_thrift.CameraServer, server['ip'], 6000, socket_timeout=10000) as c:
             for data_code in server_data[id_]:
                 try:
@@ -154,6 +157,8 @@ def identify_servers(servers):
             logging.error(e)
         except Exception as e:
             logging.error(e)
+
+
     return out_servers
 
 
@@ -246,5 +251,4 @@ def stream():
     """
     server_id = request.args.get('server_id')
     stream_url = request.args.get('stream_url')
-    print('stream_url: {}'.format(stream_url))
     return render_template('/stream.html', title='Stream {}'.format(server_id), id_=server_id, stream_url=stream_url)
