@@ -8,7 +8,7 @@ from future.utils import iteritems
 import collections
 
 import thriftpy
-from thriftpy.rpc import client_context
+from thriftpy.rpc import client_context, make_client
 import thriftpy.transport
 import thriftpy.thrift
 from flask import render_template, flash, url_for, request, redirect
@@ -80,23 +80,22 @@ def capture(all_servers, server_id='all'):
     :param server_id: the server_id to send to, or `all` for all servers
     :return: None
     """
-    def _capture_single(server_):
-        with client_context(pepi_thrift.CameraServer, server['ip'], 6000) as c:
-            app.server_data[server_['id']].append(str(app.capture_no))
-            c.start_capture(str(app.capture_no))
-
     if server_id != 'all':
-        server = find_server_by(all_servers, id_=server_id)
-        if server:
-            _capture_single(server)
-            app.capture_no += 1
-        else:
+        servers = [find_server_by(all_servers, id_=server_id)]
+        if not servers:
             logging.warn("Couldn't find server with id: {}".format(server_id))
+            return
     else:
         # Capturing from all
-        for server in all_servers:
-            _capture_single(server)
-        app.capture_no += 1
+        servers = map(lambda x: (x['id'], make_client(pepi_thrift.CameraServer, x['ip'], 6000)), all_servers)
+
+    for _, server in servers:
+        server.start_capture(str(app.capture_no))
+
+    for id, server in servers:
+        app.server_data[id].append(str(app.capture_no))
+        server.close()
+    app.capture_no += 1
 
 
 def download_images(all_servers):

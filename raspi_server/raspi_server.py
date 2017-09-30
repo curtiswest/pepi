@@ -37,6 +37,7 @@ class RaspPiCameraServer(BaseCameraServer):
                 for line in f:
                     if line[0:6] == 'Serial':
                         return line[10:26]
+                return super(BaseCameraServer, self).identify()
                 return uuid.uuid4().hex[0:16]
         except IOError:
             return uuid.uuid4().hex[0:16]

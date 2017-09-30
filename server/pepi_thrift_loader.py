@@ -1,3 +1,8 @@
+"""
+Loads PEPI's Thrift interface definitions as Python objects accessible under ``pepi_thrift``
+after importing this module.
+"""
+
 import sys
 import os
 from glob import glob

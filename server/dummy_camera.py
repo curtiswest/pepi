@@ -35,14 +35,14 @@ class DummyCamera(AbstractCamera):
 
     @staticmethod
     def _random_image_gen(resolution):
-        return (np.random.rand(resolution[1], resolution[0], 3) * 255).astype(np.uint8)
+        return (np.random.rand(resolution[1], resolution[0], 3) * 255).astype(np.uint8).tolist()
 
     def still(self):
         # type: () -> [[int], [int], [int]]
         """
         Captures a still from the camera and returns it as 3-dimensional RGB array representing the image.
 
-        :return: [[[R, G, B]] NumPy array of Numpy.uint8 0-255 values.
+        :return: multidimensional list of row, column, RGB values between 0-255.
         """
         return self._random_image_gen(resolution=self.resolution)
 
@@ -52,7 +52,7 @@ class DummyCamera(AbstractCamera):
         Captures a low resolution still from the camera and returns it as 3-dimensional RGB array
         representing the image.
 
-        :return: [[[R, G, B]] NumPy array of Numpy.uint8 0-255 values.
+        :return: multidimensional list of row, column, RGB values between 0-255.
         """
         return self._random_image_gen(resolution=(640, 480))
 

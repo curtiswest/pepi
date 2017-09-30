@@ -41,7 +41,7 @@ PEPI is indifferent to which language you implement your server in, so long as i
 * Smalltalk
 * ..plus others in the works or supported by third parties
 
-Therefore, any of the above languages can be used to implement a PEPI server.
+Therefore, any of the above languages can be used to implement PEPI server-side components.
 
 Writing New Servers
 ===================
@@ -56,7 +56,7 @@ At the heart of PEPI is its interface definition file ``pepi.thrift``. This defi
 
 Depending on the language you choose to implement your new server/camera, the exact format of how you implement these functions will vary, but generally you'll just write the functions exactly as listed (but in the syntax of your language).
 
-From the perspective of writing a server implementation, there are no special requirements from Thrift; you don't need to return Thrift types or use Thrift objects. Your server won't even know its been called from Thrift. Instead, ``CameraServer`` implementations as `handlers` that are called when in response to a Thrift requests, with Thrift managing all the necessary type conversions and transports.
+From the perspective of writing a server implementation, there are no special requirements from Thrift; you don't need to return Thrift types or use Thrift objects. Your server won't even know its been called from Thrift (sometimes it won't be). Instead, treat component implementations as `handlers` that are called when in response to a Thrift requests, with Thrift managing all the necessary type conversions and network transports.
 
 Python's BaseCameraServer
 -------------------------

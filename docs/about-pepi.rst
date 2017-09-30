@@ -8,7 +8,9 @@ What is PEPI?
 =============
 PEPI's is intended to be used as a method to acquire stereo-photogrammetry imagery. It should be noted that PEPI does not yet perform any of the photogrammetric analysis - that is reserved for existing software.
 
-The implementation and design of PEPI was completed in a 12 week project as part of an undergraduate capstone project with Griffith University. The development of PEPI is detailed in the thesis, "A Low-cost Distributed Camera System for Stereo-photogrammetry", which provides more in-depth justifications than could reasonably fit here.
+The implementation and design of PEPI was completed in a 12 week project as part of an undergraduate capstone project with Griffith University. The development of PEPI is detailed in the thesis, `"A Low-cost Distributed Camera System for Stereo-photogrammetry"`_, which provides more in-depth justifications than could reasonably fit here.
+
+.. _"A Low-cost Distributed Camera System for Stereo-photogrammetry": https://www.curtiswest.net/pepi/
 
 Terminology
 ===========
@@ -61,7 +63,7 @@ So to recap, PEPI is:
 
 Hardware
 ========
-At present, the only concrete server implementation in the GitHub repo is for the Raspberry Pi's. To run the provided implementation, you will need:
+To run the provided implementation for the Raspberry Pi & Camera Modules, you will need:
 
 * Raspberry Pi (any model) and Raspberry Pi Camera Module (any version) with matching cable
 * 8GB or larger microSD card, preferably Class 10 for speed

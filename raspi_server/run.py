@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+"""
+Launcher for the Raspberry Pi server and camera implementations.
+"""
 
 if __name__ == "__main__":
     import logging
