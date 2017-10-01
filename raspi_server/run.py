@@ -1,34 +1,21 @@
 #!/usr/bin/env python
+"""
+Launcher for the Raspberry Pi server and camera implementations.
+"""
 
 if __name__ == "__main__":
-    import os
-    import sys
     import logging
 
-    import thriftpy
     from thriftpy.rpc import make_server
 
-    from raspi_server import RaspPiImagingServer
-    from raspi_imager import RPiCameraImager
-
-    suffix = '/poc.thrift'
-    prefix = os.path.abspath('.')
-
-    if not os.path.isfile(prefix+suffix):
-        while not os.path.isfile(prefix+suffix):
-            if prefix == '/':
-                print('Could not find {} in parent folders'.format(suffix))
-                sys.exit([1])
-            prefix, _ = os.path.split(prefix)
-    poc_thrift = thriftpy.load('{}/poc.thrift'.format(prefix), module_name='poc_thrift')
+    from raspi_server import RaspPiCameraServer
+    from raspi_camera import RaspPiCamera
+    from server import pepi_thrift
 
     logging.basicConfig(level=logging.DEBUG)
+    handler = RaspPiCameraServer(cameras=[RaspPiCamera()], stream=True)
+    rpi_server = make_server(pepi_thrift.CameraServer, handler, '0.0.0.0', 6000)
+    logging.info('Starting RaspPiCameraServer')
 
-    poc_thrift = thriftpy.load('{}/poc.thrift'.format(prefix), module_name='poc_thrift')
-    handler = RaspPiImagingServer(imagers=[RPiCameraImager()], stream=True)
-    server = make_server(poc_thrift.ImagingServer, handler, '0.0.0.0', 6000)
-    logging.info('Starting RaspPiImagingServer')
-
-    server.daemon = True
-    server.serve()
-
+    rpi_server.daemon = True
+    rpi_server.serve()

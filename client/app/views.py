@@ -8,20 +8,18 @@ from future.utils import iteritems
 import collections
 
 import thriftpy
-from thriftpy.rpc import client_context
+from thriftpy.rpc import client_context, make_client
 import thriftpy.transport
 import thriftpy.thrift
 from flask import render_template, flash, url_for, request, redirect
 
 from app import app
 sys.path.append('../')
-from server import ImageUnavailable
-
-poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
+from server import ImageUnavailable, pepi_thrift
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
-__version__ = '2.1'
+__version__ = '3.0'
 __maintainer__ = 'Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'
@@ -59,44 +57,65 @@ def open_images_folder():
 
 
 def find_server_by(servers, id_=None, ip=None):
+    """
+    Returns a server from the dictionary of servers that matches either the given `id_` or `ip.
+    :param servers: a list of dictionaries of servers, with each being {id: id, ip: ip}
+    :param id_: the id_ to match a server against
+    :param ip: the ip to match a server against
+    :return: the dictionary entry if a serve matches, None otherwise
+    """
     for server in servers:
         if server['id'] == id_ or server['ip'] == ip:
             return server
-    else:
-        return None
 
 
-def capture(all_servers, server_id):
-    def _capture_single(server_):
-        with client_context(poc_thrift.ImagingServer, server['ip'], 6000) as c:
-            app.server_data[server_['id']].append(str(app.capture_no))
-            c.start_capture(str(app.capture_no))
-
+def capture(all_servers, server_id='all'):
+    """
+    Sends the capture commands to the server given in `server_id` from the list
+    of given servers (`all_servers`), else sends the capture command to all of
+    the servers in `all_servers`.
+    :param all_servers: a list of dictionaries of servers, with each being {id: id, ip: ip}
+    :param server_id: the server_id to send to, or `all` for all servers
+    :return: None
+    """
     if server_id != 'all':
-        server = find_server_by(all_servers, id_=server_id)
-        if server:
-            _capture_single(server)
-            app.capture_no += 1
-        else:
+        servers = [find_server_by(all_servers, id_=server_id)]
+        if not servers:
             logging.warn("Couldn't find server with id: {}".format(server_id))
+            return
     else:
         # Capturing from all
-        for server in all_servers:
-            _capture_single(server)
-        app.capture_no += 1
+        servers = map(lambda x: (x['id'], make_client(pepi_thrift.CameraServer, x['ip'], 6000)), all_servers)
+
+    for _, server in servers:
+        server.start_capture(str(app.capture_no))
+
+    for id_, server in servers:
+        app.server_data[id_].append(str(app.capture_no))
+        server.close()
+    app.capture_no += 1
 
 
 def download_images(all_servers):
+    """
+    Downloads all known images from servers in `all_servers` based on what the client has stored into a
+    timestamped folder under '/images'.
+    :param all_servers: a list of dictionaries of servers, with each being {id: id, ip: ip}
+    :return: None
+    """
     image_dir = get_image_dir()
     downloaded_images = collections.defaultdict(list)
     server_data = app.server_data.copy()
 
     for id_ in server_data:
         server = find_server_by(all_servers, id_=id_)
-        with client_context(poc_thrift.ImagingServer, server['ip'], 6000, socket_timeout=10000) as c:
+        if not server:
+            downloaded_images[id_].extend(server_data[id_])
+            continue
+        with client_context(pepi_thrift.CameraServer, server['ip'], 6000, socket_timeout=10000) as c:
             for data_code in server_data[id_]:
                 try:
-                    images = c.retrieve_still_jpgs(data_code)
+                    images = c.retrieve_stills_jpg(data_code)
                 except ImageUnavailable as e:
                     logging.warn(e)
                     downloaded_images[id_].append(data_code)
@@ -104,7 +123,8 @@ def download_images(all_servers):
                     downloaded_images[id_].append(data_code)
                     for count, image in enumerate(images):
                         logging.info('Received data_code {}. Image length: {} bytes'.format(data_code, len(image)))
-                        out_file = open('{}/id{}_d{}_cam{}.jpeg'.format(image_dir, server['id'], data_code, count), 'wb')
+                        out_file = open('{}/id{}_d{}_cam{}.jpeg'.format(image_dir, server['id'], data_code, count),
+                                        'wb')
                         out_file.write(image)
                         out_file.close()
 
@@ -112,15 +132,19 @@ def download_images(all_servers):
         [server_data[id_].remove(data_code) for data_code in data_code_list]
     app.server_data = server_data
     logging.info('Client expected data codes now: {}'.format(app.server_data))
-    # [server_data[id_].remove(data_code) for id_, data_code in iteritems(downloaded_images)]
-    # app.server_data = server_data
 
 
 def identify_servers(servers):
+    """
+    Gets the identifier information about each server in the given `servers`
+    dictionary, including its ID and stream urls and returns it as a list of dicts.
+    :param servers: a list of IPs where servers are known to exist
+    :return: a list of dictionaries containing {server_id: {ip: ip, id: id:, stream_url: stream_url}
+    """
     out_servers = []
     for ip in servers:
         try:
-            with client_context(poc_thrift.ImagingServer, ip, 6000, socket_timeout=2500) as c:
+            with client_context(pepi_thrift.CameraServer, ip, 6000, socket_timeout=2500) as c:
                 stream_urls = c.stream_urls()
                 # TODO: add multi-camera support for more than 1 stream per server
                 stream_url = stream_urls[0] if stream_urls else []
@@ -130,12 +154,21 @@ def identify_servers(servers):
             logging.error(e)
         except Exception as e:
             logging.error(e)
+
+
     return out_servers
 
 
 def shutdown(all_servers, server_id):
+    """
+    Shuts down the server given by `server_id` from the `all_servers` list, or if server_id
+    is given as `all, shuts down all servers in the `all_servers` list.
+    :param all_servers: a list of dictionaries of servers, with each being {id: id, ip: ip}
+    :param server_id:
+    :return:
+    """
     def _shutdown_single(server_):
-        with client_context(poc_thrift.ImagingServer, server_['ip'], 6000) as c:
+        with client_context(pepi_thrift.CameraServer, server_['ip'], 6000) as c:
             c.shutdown()
 
     if server_id != 'all':
@@ -153,6 +186,11 @@ def shutdown(all_servers, server_id):
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/setup/', methods=['GET', 'POST'])
 def index():
+    """
+    Displays a the main setup screen for PEPI and handles the button presses
+    which call the above functions.
+    :return: rendered Flask template.
+    """
     # Get servers
     servers = identify_servers(app.heartbeater.ip_set.copy())
 
@@ -182,11 +220,9 @@ def index():
                 server = find_server_by(servers, id_=request.form[key])
                 if server:
                     return redirect(url_for('configure', server_id=server['id']))
-                pass
             elif key == 'shutdown':
                 flash('Shutdown command sent to server(s). Servers will now shutdown', 'success')
                 shutdown(all_servers=servers, server_id=request.form[key])
-                pass
 
     # Render the template
     return render_template('/setup.html', title='Setup', servers=servers)
@@ -194,13 +230,20 @@ def index():
 
 @app.route('/setup')
 def configure(server_id):
+    """
+    Not implemented, but will be used to configure cameras.
+    :return: rendered Flask template.
+    """
     logging.warn('Got config for {} but config not yet implemented'.format(server_id))
     return render_template('/setup.html')
 
 
 @app.route('/stream', methods=['GET'])
 def stream():
+    """
+    Displays a full-screen stream for the given server.
+    :return: rendered Flask template.
+    """
     server_id = request.args.get('server_id')
     stream_url = request.args.get('stream_url')
-    print('stream_url: {}'.format(stream_url))
     return render_template('/stream.html', title='Stream {}'.format(server_id), id_=server_id, stream_url=stream_url)

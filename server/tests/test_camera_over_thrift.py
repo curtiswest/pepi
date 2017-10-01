@@ -5,7 +5,7 @@ import time
 import pytest
 from thriftpy.rpc import make_server, client_context
 
-from . import MetaCameraServerContract
+from . import AbstractCameraContract
 from .. import pepi_thrift
 
 if sys.version_info < (3,):
@@ -17,26 +17,25 @@ else:
 
 
 # noinspection PyMethodMayBeStatic
-class MetaCameraServerOverThrift(MetaCameraServerContract):
+class AbstractCameraOverThrift(AbstractCameraContract):
     @pytest.fixture(scope="module")
-    def local_server(self):
-        raise NotImplementedError('You must override the @pytest.fixture `local_server`')
+    def local_camera(self):
+        raise NotImplementedError('You must override the @pytest.fixture `local_camera`')
 
     @pytest.fixture(scope="session")
     def port(self):
-        return 6521
+        return 6522
 
     @pytest.fixture(scope="module")
-    def run_server(self, local_server, port):
-        server = make_server(pepi_thrift.CameraServer, local_server, '127.0.0.1', port)
+    def run_server(self, local_camera, port):
+        server = make_server(pepi_thrift.Camera, local_camera, '127.0.0.1', port)
         t = threading.Thread(target=server.serve)
         t.daemon = True
         t.start()
-        return None
 
     # noinspection PyMethodOverriding
     @pytest.fixture(scope="function")
-    def server(self, run_server, port):
+    def camera(self, run_server, port):
         time.sleep(0.2)
-        with client_context(pepi_thrift.CameraServer, '127.0.0.1', port) as c:
+        with client_context(pepi_thrift.Camera, '127.0.0.1', port) as c:
             yield c

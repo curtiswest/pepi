@@ -14,13 +14,13 @@ except ImportError:
 import thriftpy
 from thriftpy.rpc import client_context
 import thriftpy.transport
+from server.pepi_thrift_loader import pepi_thrift
 
-poc_thrift = thriftpy.load('../poc.thrift', module_name='poc_thrift')
 logging.basicConfig(level=logging.INFO)
 
 __author__ = 'Curtis West'
 __copyright__ = 'Copyright 2017, Curtis West'
-__version__ = '2.1'
+__version__ = '3.0'
 __maintainer__ = 'Curtis West'
 __email__ = 'curtis@curtiswest.net'
 __status__ = 'Development'
@@ -73,6 +73,10 @@ class ThreadPool(object):
 
 
 class Heartbeater(threading.Thread):
+    """
+    Heartbeater scans all IP's within the subnet of the given `based_ip` for the existence of PEPI camera servers. It
+    will only complete the scan at most once ever `min_interval` seconds.
+    """
     def __init__(self, min_interval, base_ip):
         # type: (int, str) -> None
         base_ip = base_ip.rstrip()
@@ -99,7 +103,7 @@ class Heartbeater(threading.Thread):
     def ping_server_at_ip(ip):
         # type: (str) -> (str, bool)
         try:
-            with client_context(poc_thrift.ImagingServer, ip, 6000, connect_timeout=300, socket_timeout=1000) as c:
+            with client_context(pepi_thrift.CameraServer, ip, 6000, connect_timeout=300, socket_timeout=1000) as c:
                 ping_result = c.ping()
         except thriftpy.transport.TTransportException:
             return ip, False
