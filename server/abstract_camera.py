@@ -51,7 +51,7 @@ class AbstractCamera(object):
 
         :return: [[[R, G, B]] NumPy array of Numpy.uint8 0-255 values.
         """
-        return RGBImage(self.still()).low_res
+        return RGBImage(self.still()).low_res # pragma: no cover
 
     @abstractmethod
     def get_max_resolution(self):

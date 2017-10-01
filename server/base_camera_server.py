@@ -38,7 +38,7 @@ class CameraTimelapser(threading.Thread):
         self.interval = interval
         self.daemon = True
 
-        def cleanup(self):
+        def cleanup(self):  # pragma: no cover
             self.camera = None
         atexit.register(cleanup, self)
 
@@ -108,7 +108,7 @@ class BaseCameraServer(object):
                 capturer.start()
                 self.streams[camera] = StreamInfo(port=port_, folder=folder_, streamer=streamer_, capturer=capturer)
 
-        def cleanup():
+        def cleanup():  # pragma: no cover
             """
             Cleans up after this server by destroying connected cameras
             and their streams, and erasing the stored images.
