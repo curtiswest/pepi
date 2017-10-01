@@ -99,11 +99,14 @@ class RGBImage(object):
 
     @array.setter
     def array(self, value):
-        value = np.array(value)
+        value = np.array(value, dtype=np.uint8)
         try:
             Image.fromarray(value)
-        except (TypeError, ValueError, IOError) as e:
-            raise ValueError('Array does not form a valid image: {}'.format(e.message))
+        except Exception as e:
+            try:
+                raise ValueError('Array does not form a valid image: {}'.format(e.message))
+            except AttributeError:  # pragma: no cover
+                raise ValueError('Array does not form a valid image')
         else:
             self._array = value
 
