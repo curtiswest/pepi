@@ -5,7 +5,6 @@ abstract_camera.py: Holds the Python definition of a ``Camera`` as defined in ``
 from abc import ABCMeta, abstractmethod
 from io import BytesIO
 
-import typing
 import numpy as np
 from PIL import Image, ImageOps
 
@@ -146,7 +145,7 @@ class RGBImage(object):
 
     @classmethod
     def frombytes(cls, mode, size, bytes_):
-        # type: (str, (int, int), typing.Union[str, bytes] -> RGBImage
+        # type: (str, (int, int), (str or bytes)) -> RGBImage
         """
         Construct a RGBImage from the pixel data in a buffer.
 
@@ -160,7 +159,7 @@ class RGBImage(object):
 
     @classmethod
     def fromfile(cls, file):
-        # type: (typing.Union[BytesIO, str] -> RGBImage
+        # type: (BytesIO or str) -> RGBImage
         """
         Construct a RGB image from the given file
 

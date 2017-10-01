@@ -63,19 +63,19 @@ class BaseCameraServer(object):
     of this server over RPC, if it is launched with Thrift.
 
     A CameraServer subclassing BaseCameraServer may override any of these
-    methods to better reflect their use. However, care must be taken to 
+    methods to better reflect their use. However, care must be taken to
     ensure that the side effects of the subclass's methods do not affect
-    other methods. For example, if you were to change the capture method 
+    other methods. For example, if you were to change the capture method
     to store images in a list for whatever reason, you would need to change
-    the image retrieval methods. 
-    
+    the image retrieval methods.
+
     A CameraServer's use-case is to provide a server that controls a
     number of cameras to be controlled in a consistent manner. This allows
     for a client to seamlessly control all implementations of CameraServer's,
     over Thrift without needing to concern themselves with what cameras are
     attached, the procedure call names, etc.
 
-    This BaseCameraServer implementation supports multiple connected cameras, 
+    This BaseCameraServer implementation supports multiple connected cameras,
     that are transparent to the connecting client. When retrieving images, a
     list of encoded images are returned. The order of this list remains
     consistent across procedure calls.
@@ -158,7 +158,7 @@ class BaseCameraServer(object):
         """
         logging.info('stream_urls()')
         out_urls = []
-        for imager, stream_info in viewitems(self.streams):
+        for _, stream_info in viewitems(self.streams):
             out_urls.append('http://{}:{}/stream.mjpeg'.format(self._current_ip(), stream_info.port))
         return out_urls
 

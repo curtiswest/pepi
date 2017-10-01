@@ -67,8 +67,6 @@ def find_server_by(servers, id_=None, ip=None):
     for server in servers:
         if server['id'] == id_ or server['ip'] == ip:
             return server
-    else:
-        return None
 
 
 def capture(all_servers, server_id='all'):
@@ -92,8 +90,8 @@ def capture(all_servers, server_id='all'):
     for _, server in servers:
         server.start_capture(str(app.capture_no))
 
-    for id, server in servers:
-        app.server_data[id].append(str(app.capture_no))
+    for id_, server in servers:
+        app.server_data[id_].append(str(app.capture_no))
         server.close()
     app.capture_no += 1
 
@@ -222,11 +220,9 @@ def index():
                 server = find_server_by(servers, id_=request.form[key])
                 if server:
                     return redirect(url_for('configure', server_id=server['id']))
-                pass
             elif key == 'shutdown':
                 flash('Shutdown command sent to server(s). Servers will now shutdown', 'success')
                 shutdown(all_servers=servers, server_id=request.form[key])
-                pass
 
     # Render the template
     return render_template('/setup.html', title='Setup', servers=servers)
