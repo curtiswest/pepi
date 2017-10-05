@@ -21,6 +21,8 @@ PEPI is a software platform that enables remote command and control of servers w
 
 PEPI is designed to be expanded upon. The implementation in this repo is purely Python-based for a `Raspberry Pi`_ with Camera Module, but it is built upon `Apache Thrift`_. Therefore, any correct implementation in an Apache Thrift supported language should work out of the box. This means that as long as you can write a camera 'adapter' that adheres to the PEPI standard, you can use it with PEPI.
 
+Why is this important? Most existing photogrammetry systems only work with their bespoke cameras. This means that we can't take advantage of the breadth of camera sensors available (especially smartphone camera sensors), nor can we currently customise a system to address a combination of quality, performance and financial constraints. PEPI fixes that. 
+
 Links
 =====
 * PEPI is licensed under the `Apache-2.0 license`_.
