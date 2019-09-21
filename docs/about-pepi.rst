@@ -10,7 +10,7 @@ PEPI's is intended to be used as a method to acquire stereo-photogrammetry image
 
 The implementation and design of PEPI was completed in a 12 week project as part of an undergraduate capstone project with Griffith University. The development of PEPI is detailed in the thesis, `"A Low-cost Distributed Camera System for Stereo-photogrammetry"`_, which provides more in-depth justifications than could reasonably fit here.
 
-.. _"A Low-cost Distributed Camera System for Stereo-photogrammetry": https://www.curtiswest.net/pepi/
+.. _"A Low-cost Distributed Camera System for Stereo-photogrammetry": https://www.dropbox.com/s/j7cx0qigpe3qpbj/west_curtis_IAPSFT_DistributedCameraSystemThesis.pdf?dl=0
 
 Terminology
 ===========
